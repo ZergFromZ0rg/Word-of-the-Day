@@ -64,6 +64,17 @@ def test_word_of_the_day(make_client, tmp_path):
     assert History.load(tmp_path / "history.json").days == {TODAY: data["entry"]["word"]}
 
 
+def test_widget_is_flat_and_never_null(make_client):
+    with make_client() as client:
+        data = client.get("/widget").json()
+    assert data["date"] == "2026-09-23"
+    assert data["definition"] == f"meaning of {data['word']}"
+    assert data["part_of_speech"] == "noun"
+    assert data["source"] == "Test"
+    assert data["pronunciation"] == data["etymology"] == data["example"] == ""
+    assert all(isinstance(v, str) for v in data.values())
+
+
 def test_word_for_a_date(make_client):
     with make_client() as client:
         response = client.get("/word-of-the-day/2026-12-25")
@@ -142,6 +153,7 @@ def test_docs_list_the_endpoints(make_client):
         "/word-of-the-day/{day}",
         "/words/{word}",
         "/recent",
+        "/widget",
         "/health",
     }
 

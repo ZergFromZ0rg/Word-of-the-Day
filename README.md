@@ -108,6 +108,7 @@ word-of-the-day-api                  # http://127.0.0.1:8000, interactive docs a
 | `GET /word-of-the-day/{YYYY-MM-DD}` | the same for another date (future dates are a preview) |
 | `GET /words/{word}` | the entry for any word |
 | `GET /recent?days=7` | `[{"date": ..., "word": ...}]` for earlier days, most recent first |
+| `GET /widget` | today's word as flat strings, for dashboard widgets |
 | `GET /health` | `{"status": "ok", "version": ..., "today": ..., "words": 30}` |
 
 `entry` has the same fields as `WordEntry` above. Errors come back as
@@ -126,6 +127,26 @@ const { date, entry } = await res.json();
 
 For more uvicorn options (workers, TLS, reload), run it directly:
 `uvicorn --factory word_of_day.api:app_from_env --host 0.0.0.0`.
+
+## Optional: Homepage dashboard integration
+
+Nothing here is required; the library, CLI and API work on their own. If you run
+[Homepage](https://gethomepage.dev), `integrations/homepage/` has two files:
+
+1. `docker-compose.yml` runs the API in a container (word list, history and cache live
+   in a volume; set your time zone and optional Merriam-Webster keys in it):
+   ```bash
+   docker compose -f integrations/homepage/docker-compose.yml up -d --build
+   ```
+2. `services.yaml` is a ready-made `customapi` widget for Homepage. It reads
+   `GET /widget`, which returns today's word as flat strings (`word`, `definition`,
+   `pronunciation`, `part_of_speech`, `example`, `synonyms`, `etymology`, ...) so the
+   widget needs no nested lookups. Put both containers on the same Docker network, or
+   change the URL to `host:8000`.
+
+Edit the word list inside the volume: `docker exec -it word-of-the-day sh -c 'cat >> /data/words.txt'`,
+or run `docker exec word-of-the-day word-of-the-day --import-mw-wotd` to grow it from
+Merriam-Webster's feed.
 
 ## How it works
 
@@ -226,6 +247,5 @@ attribution.
 
 ## Next steps
 
-- Docker image for the homelab (mount `cache/` and `history.json`, set `WOTD_TIMEZONE`)
 - The homepage widget: word, definition, pronunciation button, quiz card
 - SQLite in place of the JSON files

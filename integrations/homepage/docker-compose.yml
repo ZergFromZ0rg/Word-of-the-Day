@@ -1,0 +1,20 @@
+# Optional: runs the Word of the Day API next to your dashboard.
+# From the repo root:  docker compose -f integrations/homepage/docker-compose.yml up -d --build
+services:
+  word-of-the-day:
+    build: ../..
+    container_name: word-of-the-day
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      TZ: America/Toronto            # your time zone
+      WOTD_TIMEZONE: America/Toronto # decides when "today" starts
+      # Optional Merriam-Webster keys (free at dictionaryapi.com); works without them.
+      MW_DICTIONARY_KEY: ${MW_DICTIONARY_KEY:-}
+      MW_THESAURUS_KEY: ${MW_THESAURUS_KEY:-}
+    volumes:
+      - wotd-data:/data              # word list, history and cache survive restarts
+
+volumes:
+  wotd-data:
