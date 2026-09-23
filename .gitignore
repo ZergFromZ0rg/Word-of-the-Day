@@ -1,0 +1,15 @@
+# Secrets
+.env
+
+# Runtime data: looked-up definitions and which day got which word
+cache/
+history.json
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
