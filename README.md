@@ -76,6 +76,18 @@ word-of-the-day-api        # http://127.0.0.1:8000, docs at /docs
 `GET /word-of-the-day` returns today's word as JSON. `GET /widget` returns it as flat
 fields for dashboards.
 
+## Use your own word list
+
+- **Terminal:** put words in any text file (one per line) and run
+  `word-of-the-day --words mywords.txt`, or just edit `words.txt`.
+- **Over HTTP:** set `WOTD_ADMIN_TOKEN` to a long random secret, then upload a file:
+  ```bash
+  curl -X PUT -H "Authorization: Bearer $WOTD_ADMIN_TOKEN" \
+       --data-binary @mywords.txt http://localhost:8000/word-list
+  ```
+  This replaces the list. Add `?mode=add` to append instead. Uploads are disabled
+  unless the token is set.
+
 ## Homepage dashboard (optional)
 
 Files in [`integrations/homepage/`](integrations/homepage) run the API in Docker and add

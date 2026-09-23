@@ -13,6 +13,8 @@ services:
       # Optional Merriam-Webster keys (free at dictionaryapi.com); works without them.
       MW_DICTIONARY_KEY: ${MW_DICTIONARY_KEY:-}
       MW_THESAURUS_KEY: ${MW_THESAURUS_KEY:-}
+      # Optional: set to allow uploading a word list (PUT /word-list); leave empty to disable.
+      WOTD_ADMIN_TOKEN: ${WOTD_ADMIN_TOKEN:-}
     volumes:
       - wotd-data:/data              # word list, history and cache survive restarts
 

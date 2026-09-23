@@ -7,8 +7,10 @@ what keeps a day's word from changing when the list is edited; see history.py.
 
 from __future__ import annotations
 
+import os
 import random
 import re
+import tempfile
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
@@ -18,11 +20,29 @@ from .models import unique
 DEFAULT_SEED = "word-of-the-day"
 
 
-def load_words(path: str | Path) -> list[str]:
-    """Read one word or phrase per line, skipping blanks, `#` comments and duplicates."""
-    lines = Path(path).read_text(encoding="utf-8").splitlines()
-    words = (re.sub(r"\s+", " ", line.strip()) for line in lines)
+def parse_words(text: str) -> list[str]:
+    """One word or phrase per line, skipping blanks, `#` comments and duplicates."""
+    words = (re.sub(r"\s+", " ", line.strip()) for line in text.splitlines())
     return unique(word for word in words if not word.startswith("#"))
+
+
+def load_words(path: str | Path) -> list[str]:
+    """Read a word list file (see parse_words)."""
+    return parse_words(Path(path).read_text(encoding="utf-8"))
+
+
+def save_words(path: str | Path, words: Iterable[str]) -> None:
+    """Replace the word list file, all at once so a reader never sees half a list."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("\n".join(words) + "\n")
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def add_words(path: str | Path, words: Iterable[str]) -> list[str]:
