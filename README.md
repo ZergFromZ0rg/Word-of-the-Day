@@ -161,7 +161,7 @@ keeps the list growing:
 - Definitions contain formatting tokens (`{bc}`, `{it}…{/it}`, `{sx|word||}`) that
   `clean_markup()` strips.
 - Results include entries for related words, so they're filtered by headword. An
-  inflected form like "ran" resolves to "run".
+  inflected form without its own entry, like "ephemerals", resolves to "ephemeral".
 
 ## Project layout
 
