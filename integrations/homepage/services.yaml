@@ -1,0 +1,24 @@
+# Optional: paste into the services.yaml of Homepage (https://gethomepage.dev).
+# Uses its "customapi" widget against the /widget endpoint, which returns flat fields.
+# Replace `word-of-the-day` with the container name or host:port if Homepage isn't on
+# the same Docker network.
+- Learning:
+    - Word of the Day:
+        icon: mdi-book-alphabet
+        href: http://word-of-the-day:8000/docs
+        description: Merriam-Webster
+        widget:
+          type: customapi
+          url: http://word-of-the-day:8000/widget
+          refreshInterval: 3600000   # hourly
+          method: GET
+          display: list
+          mappings:
+            - field: word
+              label: Word
+            - field: part_of_speech
+              label: Type
+            - field: definition
+              label: Meaning
+            - field: pronunciation
+              label: Say it
