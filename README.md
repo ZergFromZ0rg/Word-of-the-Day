@@ -42,7 +42,9 @@ It works without any API keys, using the free sources. For Merriam-Webster, regi
 
 - **Collegiate Dictionary** → `MW_DICTIONARY_KEY` (definitions, examples, pronunciation,
   audio, etymology)
-- **Collegiate Thesaurus** → `MW_THESAURUS_KEY` (synonyms, antonyms)
+- **Collegiate Thesaurus** → `MW_THESAURUS_KEY` (synonyms, antonyms). Optional: without
+  it, synonyms come from the dictionary's synonym discussions where a word has one, and
+  from Datamuse otherwise.
 
 Put the keys in `.env`, which is git-ignored. The free tier is for non-commercial use,
 up to 1,000 requests per day per key.
