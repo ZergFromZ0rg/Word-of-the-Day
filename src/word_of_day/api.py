@@ -9,6 +9,7 @@ Endpoints (interactive docs at /docs):
     GET /widget                   today's word as a flat object, for dashboard widgets
     GET /word-list                the current word list
     PUT /word-list                replace the list with an uploaded text file (needs a token)
+    GET /manage                   a web page for uploading a word list
     GET /health                   liveness check for Docker and monitors
 
 Configured with the same environment variables as the CLI (a .env file in the working
@@ -36,13 +37,14 @@ from typing import Annotated, Literal
 from dotenv import find_dotenv, load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from . import __version__
 from .errors import LookupFailedError, WordNotFoundError, WordOfTheDayError
 from .models import WordEntry
 from .selector import parse_words, save_words
 from .service import WordOfTheDay
+from .web import CSP, MANAGE_PAGE
 
 MAX_UPLOAD_BYTES = 1_000_000
 
@@ -176,6 +178,11 @@ def create_app(wotd: WordOfTheDay | None = None) -> FastAPI:
         combined = parse_words("\n".join([*current, *uploaded]))
         save_words(wotd.words_file, combined)
         return WordList(words=combined, count=len(combined), added=len(combined) - len(current))
+
+    @app.get("/manage", response_class=HTMLResponse, include_in_schema=False)
+    def manage() -> HTMLResponse:
+        """A small page for viewing today's word and uploading a word list."""
+        return HTMLResponse(MANAGE_PAGE, headers={"Content-Security-Policy": CSP})
 
     @app.get("/health")
     def health(wotd: Service) -> Health:

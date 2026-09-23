@@ -112,6 +112,7 @@ word-of-the-day-api                  # http://127.0.0.1:8000, interactive docs a
 | `GET /widget` | today's word as flat strings, for dashboard widgets |
 | `GET /word-list` | the current word list |
 | `PUT /word-list[?mode=add]` | replace (or append to) the list with an uploaded text file; needs `Authorization: Bearer $WOTD_ADMIN_TOKEN`, disabled if unset, 1 MB limit |
+| `GET /manage` | a web page for viewing today's word and uploading a list (not in `/docs`) |
 | `GET /health` | `{"status": "ok", "version": ..., "today": ..., "words": 30}` |
 
 `entry` has the same fields as `WordEntry` above. Errors come back as

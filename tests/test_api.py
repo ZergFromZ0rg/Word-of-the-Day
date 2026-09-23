@@ -124,6 +124,15 @@ def test_bad_uploads_are_rejected_and_change_nothing(make_client, admin, tmp_pat
     assert (tmp_path / "words.txt").read_text(encoding="utf-8").split() == WORDS
 
 
+def test_manage_page(make_client):
+    with make_client() as client:
+        response = client.get("/manage")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "default-src 'none'" in response.headers["content-security-policy"]
+    assert 'id="token"' in response.text and "/word-list" in response.text
+
+
 def test_word_for_a_date(make_client):
     with make_client() as client:
         response = client.get("/word-of-the-day/2026-12-25")

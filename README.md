@@ -87,6 +87,8 @@ fields for dashboards.
   ```
   This replaces the list. Add `?mode=add` to append instead. Uploads are disabled
   unless the token is set.
+- **In a browser:** open `http://localhost:8000/manage` to see today's word and upload
+  a file with a button (you type the token each time; it's never stored).
 
 ## Homepage dashboard (optional)
 
