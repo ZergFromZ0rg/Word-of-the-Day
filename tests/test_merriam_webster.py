@@ -114,13 +114,14 @@ def test_lookup_combines_dictionary_and_thesaurus():
     assert [r.url.params["key"] for r in api.requests] == ["dict-key", "thes-key"]
 
 
-def test_without_thesaurus_key_only_the_dictionary_is_called():
+def test_without_thesaurus_key_synonyms_come_from_the_dictionary():
     api = mw_api()
     source = MerriamWebsterSource(api.client(), "dict-key")
     entry = source.lookup("ephemeral")
-    assert entry.synonyms == []
+    assert entry.synonyms == ["transient", "fleeting"]
+    assert entry.antonyms == []
     assert len(api.requests) == 1
-    assert "synonyms" not in source.provides
+    assert "synonyms" in source.provides and "antonyms" not in source.provides
 
 
 def test_spelling_suggestions_mean_not_found():
@@ -147,18 +148,28 @@ def test_rate_limit_is_a_source_error():
 def test_thesaurus_failure_keeps_the_definitions():
     api = mw_api(thesaurus=httpx.Response(500))
     entry = MerriamWebsterSource(api.client(), "key", "key").lookup("ephemeral")
-    assert entry.senses and entry.synonyms == []
+    assert entry.senses and entry.synonyms == ["transient", "fleeting"]
 
 
-def test_inflected_form_uses_the_base_word():
+def test_form_without_its_own_entry_uses_the_base_word():
+    # Looking up "ephemerals" returns only the base word's noun entry.
     data = [
+        {"meta": {"id": "ephemeral:2"}, "fl": "noun", "shortdef": ["something short-lived"]},
+        {"meta": {"id": "ephemeral pond"}, "fl": "noun", "shortdef": ["a seasonal pond"]},
+    ]
+    entry = parse_dictionary(matching_entries(data, "ephemerals"))
+    assert entry.word == "ephemeral"
+    assert entry.senses == [Sense("something short-lived", "noun")]
+
+
+def test_form_with_its_own_cross_reference_entry():
+    # "ran" has a small entry of its own that only points at "run", with no part of speech.
+    data = [
+        {"meta": {"id": "ran"}, "cxs": [{"cxl": "past tense of", "cxtis": [{"cxt": "run"}]}]},
         {"meta": {"id": "run:1"}, "fl": "verb", "shortdef": ["to go faster than a walk"]},
-        {"meta": {"id": "run:2"}, "fl": "noun", "shortdef": ["an act or the activity of running"]},
-        {"meta": {"id": "runner"}, "fl": "noun", "shortdef": ["one that runs"]},
     ]
     entry = parse_dictionary(matching_entries(data, "ran"))
-    assert entry.word == "run"
-    assert [s.part_of_speech for s in entry.senses] == ["verb", "noun"]
+    assert entry.senses == [Sense("past tense of run")]
 
 
 def test_cross_reference_only_entry():

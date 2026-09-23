@@ -36,6 +36,16 @@
         ]
       }
     ],
+    "syns": [
+      {
+        "pl": "synonyms",
+        "pt": [
+          ["text", "{sc}transient{/sc} {sc}ephemeral{/sc} {sc}fleeting{/sc} mean lasting only briefly. {sc}transient{/sc} stresses a short stay. "],
+          ["vis", [{"t": "a {it}transient{/it} guest"}]],
+          ["text", " {sc}fleeting{/sc} stresses how quickly something passes. "]
+        ]
+      }
+    ],
     "shortdef": ["lasting one day only", "lasting a very short time"]
   },
   {
