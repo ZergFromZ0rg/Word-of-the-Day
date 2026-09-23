@@ -6,14 +6,12 @@ import httpx
 
 from .base import DictionarySource
 from .datamuse import DatamuseSource
-from .free_dictionary import FreeDictionarySource
 from .merriam_webster import MerriamWebsterSource
 from .wiktionary import WiktionarySource
 
 __all__ = [
     "DatamuseSource",
     "DictionarySource",
-    "FreeDictionarySource",
     "MerriamWebsterSource",
     "WiktionarySource",
     "default_sources",
@@ -30,5 +28,5 @@ def default_sources(
     sources: list[DictionarySource] = []
     if mw_dictionary_key:
         sources.append(MerriamWebsterSource(client, mw_dictionary_key, mw_thesaurus_key or None))
-    sources += [FreeDictionarySource(client), WiktionarySource(client), DatamuseSource(client)]
+    sources += [WiktionarySource(client), DatamuseSource(client)]
     return sources

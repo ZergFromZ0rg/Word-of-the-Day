@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:mw="https://www.merriam-webster.com/word-of-the-day" version="2.0">
+  <channel>
+    <title>Merriam-Webster's Word of the Day</title>
+    <link>https://www.merriam-webster.com/word-of-the-day</link>
+    <item>
+      <guid>6c0d747f-b413-4a49-908b-85aa1ef6fff2</guid>
+      <title>compendious</title>
+      <link>https://www.merriam-webster.com/word-of-the-day/compendious-2026-09-23</link>
+      <description>&lt;p&gt;Trimmed.&lt;/p&gt;</description>
+      <pubDate>Wed, 23 Sep 2026 01:00:01 -0400</pubDate>
+      <mw:shortdef>comprehensive; including many, most, or all things</mw:shortdef>
+    </item>
+    <item>
+      <guid>b32fe87f-d0d4-41d7-8794-644017138b18</guid>
+      <title>nemesis</title>
+      <link>https://www.merriam-webster.com/word-of-the-day/nemesis-2026-09-22</link>
+      <pubDate>Tue, 22 Sep 2026 01:00:01 -0400</pubDate>
+    </item>
+    <item>
+      <guid>9feaa378-5fa2-4a5e-8c5c-d068885d3a38</guid>
+      <title>elegiac</title>
+      <link>https://www.merriam-webster.com/word-of-the-day/elegiac-2026-09-21</link>
+      <pubDate>Mon, 21 Sep 2026 01:00:01 -0400</pubDate>
+    </item>
+  </channel>
+</rss>

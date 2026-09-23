@@ -54,7 +54,9 @@ def parse_definitions(data: Any) -> list[Sense]:
 
 
 def _examples(definition: dict[str, Any]) -> list[str]:
-    parsed = [e.get("example", "") for e in definition.get("parsedExamples", []) if isinstance(e, dict)]
+    parsed = [
+        e.get("example", "") for e in definition.get("parsedExamples", []) if isinstance(e, dict)
+    ]
     raw = parsed or definition.get("examples", [])
     return unique(html_to_text(example) for example in raw)
 

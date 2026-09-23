@@ -47,7 +47,9 @@ class DictionarySource(ABC):
         if status == 404:
             return None
         if status in (401, 403):
-            raise SourceError(f"{self.name}: request was refused (HTTP {status}), check the API key")
+            raise SourceError(
+                f"{self.name}: request was refused (HTTP {status}), check the API key"
+            )
         if status == 429:
             raise SourceError(f"{self.name}: rate limit reached (HTTP 429)")
         if response.is_error:

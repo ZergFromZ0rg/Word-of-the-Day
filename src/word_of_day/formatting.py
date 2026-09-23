@@ -32,6 +32,13 @@ def format_entry(
         if len(senses) > senses_per_part:
             lines.append(f"  … {len(senses) - senses_per_part} more")
 
+    history = [("Origin", entry.etymology), ("First known use", entry.first_known_use)]
+    history = [(label, text) for label, text in history if text]
+    if history:
+        lines.append("")
+    for label, text in history:
+        lines += _wrap(f"{label}: {text}", hanging=" " * (len(label) + 2))
+
     related = [("Synonyms", entry.synonyms), ("Antonyms", entry.antonyms)]
     related = [(label, words) for label, words in related if words]
     if related:

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field, replace
-from typing import Any, Iterable
+from typing import Any
 
 # Fields that can be filled in from a second source when the first one left them empty.
 # Senses are never mixed between sources, since numbering and wording wouldn't line up.
@@ -29,6 +30,10 @@ class WordEntry:
     antonyms: list[str] = field(default_factory=list)
     pronunciation: str | None = None
     audio_url: str | None = None
+    # Word history, e.g. "Greek ephēmeros lasting a day, from epi- + hēmera day".
+    # Like senses, these belong to the dictionary that supplied the entry.
+    etymology: str | None = None
+    first_known_use: str | None = None  # e.g. "1576", "15th century"
     source_url: str | None = None
     sources: list[str] = field(default_factory=list)
 
@@ -51,9 +56,7 @@ class WordEntry:
     def fill_missing_from(self, other: WordEntry) -> WordEntry:
         """Return a copy with empty fillable fields taken from `other`."""
         updates = {
-            name: getattr(other, name)
-            for name in self.missing_fields()
-            if getattr(other, name)
+            name: getattr(other, name) for name in self.missing_fields() if getattr(other, name)
         }
         if not updates:
             return self
@@ -72,12 +75,16 @@ class WordEntry:
             antonyms=list(data.get("antonyms", [])),
             pronunciation=data.get("pronunciation"),
             audio_url=data.get("audio_url"),
+            etymology=data.get("etymology"),
+            first_known_use=data.get("first_known_use"),
             source_url=data.get("source_url"),
             sources=list(data.get("sources", [])),
         )
 
 
-def unique(items: Iterable[str], *, exclude: Iterable[str] = (), limit: int | None = None) -> list[str]:
+def unique(
+    items: Iterable[str], *, exclude: Iterable[str] = (), limit: int | None = None
+) -> list[str]:
     """Drop blanks and case-insensitive duplicates, keeping the first spelling and order."""
     seen = {item.casefold() for item in exclude}
     result = []

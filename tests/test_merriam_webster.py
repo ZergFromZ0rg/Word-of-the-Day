@@ -19,8 +19,16 @@ THESAURUS = load_fixture("mw_thesaurus_ephemeral.json")
 def mw_api(dictionary=DICTIONARY, thesaurus=THESAURUS) -> Recorder:
     def handler(request: httpx.Request) -> httpx.Response:
         if "/collegiate/" in request.url.path:
-            return dictionary if isinstance(dictionary, httpx.Response) else httpx.Response(200, json=dictionary)
-        return thesaurus if isinstance(thesaurus, httpx.Response) else httpx.Response(200, json=thesaurus)
+            return (
+                dictionary
+                if isinstance(dictionary, httpx.Response)
+                else httpx.Response(200, json=dictionary)
+            )
+        return (
+            thesaurus
+            if isinstance(thesaurus, httpx.Response)
+            else httpx.Response(200, json=thesaurus)
+        )
 
     return Recorder(handler)
 
@@ -45,10 +53,19 @@ def test_clean_markup(raw, expected):
 
 @pytest.mark.parametrize(
     "name, folder",
-    [("bixtest01", "bix"), ("ggmail01", "gg"), ("3d000001", "number"), ("_test01", "number"), ("epheme02", "e")],
+    [
+        ("bixtest01", "bix"),
+        ("ggmail01", "gg"),
+        ("3d000001", "number"),
+        ("_test01", "number"),
+        ("epheme02", "e"),
+    ],
 )
 def test_audio_folder_rules(name, folder):
-    assert audio_url(name) == f"https://media.merriam-webster.com/audio/prons/en/us/mp3/{folder}/{name}.mp3"
+    assert (
+        audio_url(name)
+        == f"https://media.merriam-webster.com/audio/prons/en/us/mp3/{folder}/{name}.mp3"
+    )
 
 
 def test_parses_senses_examples_and_pronunciation():
@@ -63,12 +80,23 @@ def test_parses_senses_examples_and_pronunciation():
         ),
         Sense("something ephemeral: such as", "noun"),
         Sense("an ephemeron", "noun"),
-        Sense("a printed item meant to be discarded — usually used in plural", "noun", ["collectors of ephemerals"]),
-        Sense("a short-lived plant; specifically one that completes its life cycle in a single season", "noun"),
+        Sense(
+            "a printed item meant to be discarded — usually used in plural",
+            "noun",
+            ["collectors of ephemerals"],
+        ),
+        Sense(
+            "a short-lived plant; "
+            "specifically one that completes its life cycle in a single season",
+            "noun",
+        ),
     ]
     assert entry.pronunciation == "\\i-ˈfem-rəl\\"
     assert entry.audio_url.endswith("/mp3/e/epheme02.mp3")
     assert entry.source_url == "https://www.merriam-webster.com/dictionary/ephemeral"
+    # Formatting removed, "more at" cross-reference and supplemental note dropped.
+    assert entry.etymology == "Greek ephēmeros lasting a day, daily, from epi- + hēmera day"
+    assert entry.first_known_use == "1576"
 
 
 def test_lookup_combines_dictionary_and_thesaurus():
@@ -77,7 +105,11 @@ def test_lookup_combines_dictionary_and_thesaurus():
 
     assert entry.sources == ["Merriam-Webster"]
     assert entry.synonyms[:3] == ["evanescent", "fleeting", "fugitive"]
-    assert "brief" in entry.synonyms and "Fleeting" not in entry.synonyms and "ephemeral" not in entry.synonyms
+    assert (
+        "brief" in entry.synonyms
+        and "Fleeting" not in entry.synonyms
+        and "ephemeral" not in entry.synonyms
+    )
     assert entry.antonyms == ["enduring", "lasting", "permanent", "perpetual"]
     assert [r.url.params["key"] for r in api.requests] == ["dict-key", "thes-key"]
 
@@ -98,7 +130,9 @@ def test_spelling_suggestions_mean_not_found():
 
 
 def test_invalid_key_is_a_source_error_without_the_key():
-    api = mw_api(dictionary=httpx.Response(200, text="Invalid API key. Not subscribed for this reference."))
+    api = mw_api(
+        dictionary=httpx.Response(200, text="Invalid API key. Not subscribed for this reference.")
+    )
     with pytest.raises(SourceError, match="Invalid API key") as info:
         MerriamWebsterSource(api.client(), "secret-key").lookup("ephemeral")
     assert "secret-key" not in str(info.value)
@@ -128,6 +162,12 @@ def test_inflected_form_uses_the_base_word():
 
 
 def test_cross_reference_only_entry():
-    data = [{"meta": {"id": "baloney"}, "fl": "noun", "cxs": [{"cxl": "less common spelling of", "cxtis": [{"cxt": "bologna"}]}]}]
+    data = [
+        {
+            "meta": {"id": "baloney"},
+            "fl": "noun",
+            "cxs": [{"cxl": "less common spelling of", "cxtis": [{"cxt": "bologna"}]}],
+        }
+    ]
     entry = parse_dictionary(matching_entries(data, "baloney"))
     assert entry.senses == [Sense("less common spelling of bologna", "noun")]

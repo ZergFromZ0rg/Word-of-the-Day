@@ -1,18 +1,17 @@
-"""Reading the word list and deciding which word belongs to which day.
+"""Reading the word list and choosing a word for a day.
 
-The pick is deterministic: the same list, seed and date always give the same word,
-so every process (CLI, web server, cron job) agrees on today's word without shared
-state. Days are grouped into cycles as long as the list; each cycle is a fresh
-shuffle, so every word appears exactly once per cycle and never two days running.
+Choosing is deterministic for a given list, history and date, so two processes
+deciding at the same moment agree. The history (which date got which word) is
+what keeps a day's word from changing when the list is edited; see history.py.
 """
 
 from __future__ import annotations
 
 import random
 import re
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
-from typing import Sequence
 
 from .models import unique
 
@@ -26,29 +25,48 @@ def load_words(path: str | Path) -> list[str]:
     return unique(word for word in words if not word.startswith("#"))
 
 
-def pick_word(words: Sequence[str], day: date, seed: str = DEFAULT_SEED) -> str:
-    """Return the word for `day`."""
-    if not words:
-        raise ValueError("the word list is empty")
-    cycle, position = divmod(day.toordinal(), len(words))
-    return _cycle_order(words, cycle, seed)[position]
+def add_words(path: str | Path, words: Iterable[str]) -> list[str]:
+    """Append the words that aren't in the file yet. Returns the ones added."""
+    path = Path(path)
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    new = unique(words, exclude=load_words(path) if text else ())
+    if new:
+        separator = "\n" if text and not text.endswith("\n") else ""
+        with path.open("a", encoding="utf-8") as f:
+            f.write(separator + "\n".join(new) + "\n")
+    return new
 
 
-def _cycle_order(words: Sequence[str], cycle: int, seed: str) -> list[str]:
-    if len(words) == 2:
-        # The only way to never repeat is to alternate, so use the same order every cycle.
-        return sorted(words, key=str.casefold)
-    order = _shuffled(words, cycle, seed)
-    # Avoid repeating yesterday's word when a new cycle starts. Only positions 0 and 1
-    # move, so the previous cycle's last word is unaffected by its own fix-up.
-    if len(order) > 2 and order[0] == _shuffled(words, cycle - 1, seed)[-1]:
-        order[0], order[1] = order[1], order[0]
-    return order
+def choose_word(
+    words: Sequence[str],
+    history: Mapping[date, str],
+    day: date,
+    *,
+    seed: str = DEFAULT_SEED,
+    exclude: Collection[str] = (),
+) -> str:
+    """Pick a word for `day`, given the words already used on other days.
 
+    Words that have never been used come first, in random order. Once every word
+    has been used, it picks at random from the half of the list used longest ago,
+    so recent words don't come back soon and the order differs each round.
+    """
+    excluded = {word.casefold() for word in exclude}
+    # Sorting makes the result independent of the order of lines in the file.
+    candidates = sorted((w for w in words if w.casefold() not in excluded), key=str.casefold)
+    if not candidates:
+        raise ValueError("there are no words to choose from")
 
-def _shuffled(words: Sequence[str], cycle: int, seed: str) -> list[str]:
-    # Sorting first makes the result independent of the order of lines in the file.
-    order = sorted(words, key=str.casefold)
+    last_used: dict[str, date] = {}
+    for used_on, word in history.items():
+        if used_on != day:
+            key = word.casefold()
+            last_used[key] = max(used_on, last_used.get(key, used_on))
+
     # A string seed is hashed with SHA-512, so it's stable across runs (unlike hash()).
-    random.Random(f"{seed}:{cycle}").shuffle(order)
-    return order
+    rng = random.Random(f"{seed}:{day.isoformat()}")
+    fresh = [w for w in candidates if w.casefold() not in last_used]
+    if fresh:
+        return rng.choice(fresh)
+    oldest_first = sorted(candidates, key=lambda w: last_used[w.casefold()])
+    return rng.choice(oldest_first[: max(1, len(oldest_first) // 2)])
