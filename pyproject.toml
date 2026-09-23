@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "word-of-the-day"
-version = "0.2.0"
+version = "0.3.0"
 description = "Pick a daily word from a list and look it up in Merriam-Webster and other dictionaries."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,10 +16,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+# The HTTP API is optional, so using the library doesn't pull in a web framework.
+api = ["fastapi>=0.110", "uvicorn>=0.29"]
+# httpx2: what Starlette's test client uses (plain httpx is deprecated there).
+dev = ["word-of-the-day[api]", "pytest>=8", "ruff>=0.6", "mypy>=1.11", "httpx2>=2.0"]
 
 [project.scripts]
 word-of-the-day = "word_of_day.cli:main"
+word-of-the-day-api = "word_of_day.api:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
