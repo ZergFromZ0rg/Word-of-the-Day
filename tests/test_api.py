@@ -75,6 +75,64 @@ def test_widget_is_flat_and_never_null(make_client):
     assert all(isinstance(v, str) for v in data.values())
 
 
+@pytest.fixture
+def admin(monkeypatch):
+    monkeypatch.setenv("WOTD_ADMIN_TOKEN", "s3cret")
+    return {"Authorization": "Bearer s3cret"}
+
+
+def test_upload_is_disabled_without_a_token(make_client, monkeypatch):
+    monkeypatch.delenv("WOTD_ADMIN_TOKEN", raising=False)
+    with make_client() as client:
+        response = client.put("/word-list", content=b"new\n")
+    assert response.status_code == 403
+
+
+def test_upload_needs_the_right_token(make_client, admin, tmp_path):
+    with make_client() as client:
+        assert client.put("/word-list", content=b"new\n").status_code == 401
+        wrong = {"Authorization": "Bearer nope"}
+        assert client.put("/word-list", content=b"new\n", headers=wrong).status_code == 401
+    assert (tmp_path / "words.txt").read_text(encoding="utf-8").split() == WORDS
+
+
+def test_upload_replaces_the_list(make_client, admin, tmp_path):
+    body = "\ufeff# my list\nsonorous\n  petrichor \nsonorous\n".encode()
+    with make_client() as client:
+        response = client.put("/word-list", content=body, headers=admin)
+        assert response.status_code == 200
+        assert response.json() == {"words": ["sonorous", "petrichor"], "count": 2, "added": 2}
+        assert client.get("/word-list").json()["words"] == ["sonorous", "petrichor"]
+        assert client.get("/health").json()["words"] == 2
+    assert (tmp_path / "words.txt").read_text(encoding="utf-8") == "sonorous\npetrichor\n"
+
+
+def test_upload_can_add_to_the_list(make_client, admin):
+    with make_client() as client:
+        response = client.put("/word-list?mode=add", content=b"laconic\nsonorous\n", headers=admin)
+    assert response.json()["words"] == [*WORDS, "sonorous"]
+    assert response.json()["added"] == 1
+
+
+@pytest.mark.parametrize(
+    "body, status",
+    [(b"# only comments\n\n", 400), (b"\xff\xfe\x00bad", 400), (b"x" * 1_000_001, 413)],
+)
+def test_bad_uploads_are_rejected_and_change_nothing(make_client, admin, tmp_path, body, status):
+    with make_client() as client:
+        assert client.put("/word-list", content=body, headers=admin).status_code == status
+    assert (tmp_path / "words.txt").read_text(encoding="utf-8").split() == WORDS
+
+
+def test_manage_page(make_client):
+    with make_client() as client:
+        response = client.get("/manage")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "default-src 'none'" in response.headers["content-security-policy"]
+    assert 'id="token"' in response.text and "/word-list" in response.text
+
+
 def test_word_for_a_date(make_client):
     with make_client() as client:
         response = client.get("/word-of-the-day/2026-12-25")
@@ -154,6 +212,7 @@ def test_docs_list_the_endpoints(make_client):
         "/words/{word}",
         "/recent",
         "/widget",
+        "/word-list",
         "/health",
     }
 
