@@ -1,16 +1,17 @@
 """Shared test helpers (imported by the test modules).
 
 Tests never touch the network: sources get an httpx.Client whose transport is a
-function returning canned responses. The Merriam-Webster and Free Dictionary
-fixtures are trimmed examples in each API's documented format; the Wiktionary
-fixture is a real response.
+function returning canned responses. The Merriam-Webster fixtures are trimmed
+examples in the API's documented format; the Wiktionary fixture is a real response
+and the feed fixture is a trimmed real feed.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 
@@ -34,4 +35,3 @@ class Recorder:
 
     def client(self) -> httpx.Client:
         return httpx.Client(transport=httpx.MockTransport(self))
-

@@ -17,6 +17,11 @@
       ]
     },
     "fl": "adjective",
+    "et": [
+      ["text", "Greek {it}ephēmeros{/it} lasting a day, daily, from {it}epi-{/it} + {it}hēmera{/it} day {ma}{mat|diurnal||}{/ma}"],
+      ["et_snote", [["t", "A supplemental note that isn't part of the etymology text."]]]
+    ],
+    "date": "1576{ds||2||}",
     "def": [
       {
         "sseq": [

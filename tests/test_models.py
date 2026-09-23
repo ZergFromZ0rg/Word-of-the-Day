@@ -55,5 +55,10 @@ def test_fill_missing_with_nothing_useful_keeps_sources():
 
 
 def test_dict_round_trip():
-    entry = make_entry(synonyms=["fleeting"], audio_url="https://example.com/a.mp3")
+    entry = make_entry(
+        synonyms=["fleeting"],
+        audio_url="https://example.com/a.mp3",
+        etymology="Greek ephēmeros",
+        first_known_use="1576",
+    )
     assert WordEntry.from_dict(entry.to_dict()) == entry

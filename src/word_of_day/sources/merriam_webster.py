@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 import httpx
 
@@ -72,7 +73,7 @@ class MerriamWebsterSource(DictionarySource):
 
 
 def headword(entry: dict[str, Any]) -> str:
-    """"ephemeral:2" -> "ephemeral" (the suffix is the homograph number)."""
+    """ "ephemeral:2" -> "ephemeral" (the suffix is the homograph number)."""
     return str(entry.get("meta", {}).get("id", "")).split(":")[0]
 
 
@@ -102,15 +103,22 @@ def parse_dictionary(entries: list[dict[str, Any]]) -> WordEntry:
             # Fall back to the pre-cleaned short definitions, then to cross-references
             # ("less common spelling of bologna").
             texts = entry.get("shortdef") or [_cross_reference(entry)]
-            entry_senses = [Sense(clean_markup(t), part_of_speech) for t in texts if clean_markup(t)]
+            entry_senses = [
+                Sense(clean_markup(t), part_of_speech) for t in texts if clean_markup(t)
+            ]
         senses.extend(entry_senses)
 
     pronunciation, audio_url = _pronunciation(entries)
+    # Homographs have separate histories; use the first (main) entry that has one.
+    etymology = next(filter(None, map(_etymology, entries)), None)
+    first_known_use = next(filter(None, (clean_markup(e.get("date", "")) for e in entries)), None)
     return WordEntry(
         word=word,
         senses=senses,
         pronunciation=pronunciation,
         audio_url=audio_url,
+        etymology=etymology,
+        first_known_use=first_known_use,
         source_url=PAGE_URL.format(word=url_path_word(word)),
     )
 
@@ -198,6 +206,14 @@ def _attribution(quote: Any) -> str:
         return ""
     parts = [quote.get("auth"), quote.get("source"), quote.get("aqdate")]
     return ", ".join(clean_markup(p) for p in parts if p)
+
+
+def _etymology(entry: dict[str, Any]) -> str:
+    # "et": [["text", "Greek {it}ephēmeros{/it} ..."], ["et_snote", [...]]]
+    texts = [
+        item[1] for item in entry.get("et", []) if isinstance(item, list) and item[:1] == ["text"]
+    ]
+    return clean_markup(" ".join(texts))
 
 
 def _cross_reference(entry: dict[str, Any]) -> str:

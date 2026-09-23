@@ -1,14 +1,25 @@
 import json
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from word_of_day.cache import JsonFileCache
-from word_of_day.errors import LookupFailedError, SourceError, WordNotFoundError, WordOfTheDayError
+from word_of_day.errors import (
+    LookupFailedError,
+    SourceError,
+    WordNotFoundError,
+    WordOfTheDayError,
+)
+from word_of_day.history import History
 from word_of_day.models import FILLABLE_FIELDS, Sense, WordEntry
-from word_of_day.selector import pick_word
 from word_of_day.service import WordOfTheDay
 from word_of_day.sources import DictionarySource, MerriamWebsterSource
+
+TODAY = date(2026, 9, 23)
+COMPLETE = dict(
+    synonyms=["fleeting"], antonyms=["lasting"], pronunciation="/x/", audio_url="https://a/x.mp3"
+)
 
 
 class FakeSource(DictionarySource):
@@ -29,6 +40,23 @@ class FakeSource(DictionarySource):
         return self.result
 
 
+class KnownWords(DictionarySource):
+    """A complete dictionary for a fixed set of words."""
+
+    name = "Known"
+
+    def __init__(self, *known):
+        super().__init__(client=None)
+        self.known = set(known)
+        self.looked_up = []
+
+    def lookup(self, word):
+        self.looked_up.append(word)
+        if word not in self.known:
+            return None
+        return WordEntry(word, [Sense(f"meaning of {word}")], sources=[self.name], **COMPLETE)
+
+
 def entry(source, *, senses=True, **fields):
     return WordEntry(
         word="ephemeral",
@@ -38,9 +66,6 @@ def entry(source, *, senses=True, **fields):
     )
 
 
-COMPLETE = dict(synonyms=["fleeting"], antonyms=["lasting"], pronunciation="/x/", audio_url="https://a/x.mp3")
-
-
 @pytest.fixture
 def words_file(tmp_path):
     path = tmp_path / "words.txt"
@@ -48,8 +73,13 @@ def words_file(tmp_path):
     return path
 
 
-def make(words_file, *sources, cache=None):
-    return WordOfTheDay(words_file, sources, cache)
+def make(words_file, *sources, cache=None, history_file=None):
+    wotd = WordOfTheDay(words_file, sources, cache, history_file=history_file)
+    wotd.current_date = lambda: TODAY
+    return wotd
+
+
+# --- Combining sources ---
 
 
 def test_first_complete_entry_wins_and_later_sources_are_not_called(words_file):
@@ -75,22 +105,15 @@ def test_unexpected_exceptions_are_treated_as_source_failures(words_file):
 def test_gaps_are_filled_from_later_sources(words_file):
     primary = FakeSource("A", entry("A", pronunciation="/x/", audio_url="https://a/x.mp3"))
     definitions_only = FakeSource("W", entry("W"), provides={"senses"})
-    thesaurus = FakeSource("T", entry("T", senses=False, synonyms=["fleeting"], antonyms=["lasting"]))
+    thesaurus = FakeSource(
+        "T", entry("T", senses=False, synonyms=["fleeting"], antonyms=["lasting"])
+    )
     result = make(words_file, primary, definitions_only, thesaurus).lookup("ephemeral")
 
     assert result.definition == "definition from A"
     assert result.synonyms == ["fleeting"] and result.antonyms == ["lasting"]
     assert result.sources == ["A", "T"]
     assert definitions_only.calls == 0  # it couldn't have filled anything
-
-
-def test_related_words_found_before_definitions_are_kept(words_file):
-    thesaurus = FakeSource("T", entry("T", senses=False, synonyms=["fleeting"]))
-    dictionary = FakeSource("A", entry("A"))
-    result = make(words_file, thesaurus, dictionary).lookup("ephemeral")
-    assert result.definition == "definition from A"
-    assert result.synonyms == ["fleeting"]
-    assert result.sources == ["A", "T"]
 
 
 def test_not_found_anywhere(words_file):
@@ -109,6 +132,9 @@ def test_not_found_with_failures_is_a_lookup_failure(words_file):
     with pytest.raises(LookupFailedError, match="HTTP 500") as info:
         make(words_file, failing, FakeSource("B")).lookup("ephemeral")
     assert len(info.value.errors) == 1
+
+
+# --- Cache ---
 
 
 def test_cache_is_used_and_refresh_bypasses_it(words_file, tmp_path):
@@ -132,12 +158,100 @@ def test_entries_built_during_failures_expire_sooner(words_file, tmp_path):
     assert timedelta(hours=23) < expires_in <= timedelta(days=1)
 
 
-def test_for_date_looks_up_the_selected_word(words_file):
-    day = date(2026, 9, 23)
-    source = FakeSource("A", entry("A", **COMPLETE))
-    wotd = make(words_file, source)
-    assert wotd.word_for(day) == pick_word(["ephemeral", "serendipity", "laconic"], day)
-    assert wotd.for_date(day).sources == ["A"]
+# --- Choosing and history ---
+
+
+def test_todays_word_survives_edits_to_the_list(words_file, tmp_path):
+    history_file = tmp_path / "history.json"
+    source = KnownWords("ephemeral", "serendipity", "laconic", "compendious", "nemesis")
+    wotd = make(words_file, source, history_file=history_file)
+
+    word = wotd.today().word
+    assert History.load(history_file).days == {TODAY: word}
+
+    with words_file.open("a", encoding="utf-8") as f:
+        f.write("compendious\nnemesis\n")
+    assert wotd.today().word == word
+    assert wotd.word_for(TODAY) == word
+
+
+def test_removing_todays_word_replaces_it(words_file, tmp_path):
+    history_file = tmp_path / "history.json"
+    wotd = make(
+        words_file, KnownWords("ephemeral", "serendipity", "laconic"), history_file=history_file
+    )
+    word = wotd.today().word
+
+    remaining = [w for w in ("ephemeral", "serendipity", "laconic") if w != word]
+    words_file.write_text("\n".join(remaining), encoding="utf-8")
+    replacement = wotd.today().word
+    assert replacement in remaining
+    assert History.load(history_file).days[TODAY] == replacement
+
+
+def test_unknown_words_are_skipped_and_remembered(tmp_path):
+    words_file = tmp_path / "words.txt"
+    words_file.write_text("qwzxvbn\nzzyzzx-nope\nephemeral\n", encoding="utf-8")
+    history_file = tmp_path / "history.json"
+    source = KnownWords("ephemeral")
+    wotd = make(words_file, source, history_file=history_file)
+
+    assert wotd.today().word == "ephemeral"
+    history = History.load(history_file)
+    skipped = set(source.looked_up) - {"ephemeral"}
+    assert history.not_found == skipped
+    assert history.days == {TODAY: "ephemeral"}
+
+    # Known-bad words are never picked again.
+    for offset in range(1, 10):
+        assert wotd.word_for(TODAY + timedelta(days=offset)) not in skipped
+
+
+def test_no_findable_words_is_an_error_and_is_remembered(tmp_path):
+    words_file = tmp_path / "words.txt"
+    words_file.write_text("qwzxvbn\nzzyzzx-nope\n", encoding="utf-8")
+    history_file = tmp_path / "history.json"
+    with pytest.raises(WordOfTheDayError):
+        make(words_file, KnownWords(), history_file=history_file).today()
+    assert History.load(history_file).not_found == {"qwzxvbn", "zzyzzx-nope"}
+
+    source = KnownWords()
+    with pytest.raises(WordOfTheDayError, match="every word is marked as not found"):
+        make(words_file, source, history_file=history_file).today()
+    assert source.looked_up == []
+
+
+def test_gives_up_after_several_unknown_words(tmp_path):
+    words_file = tmp_path / "words.txt"
+    words_file.write_text("\n".join(f"nope{i}" for i in range(8)), encoding="utf-8")
+    source = KnownWords()
+    with pytest.raises(WordOfTheDayError, match="no dictionary has any of"):
+        make(words_file, source).today()
+    assert len(source.looked_up) == 5
+
+
+def test_other_dates_are_not_recorded(words_file, tmp_path):
+    history_file = tmp_path / "history.json"
+    wotd = make(
+        words_file, KnownWords("ephemeral", "serendipity", "laconic"), history_file=history_file
+    )
+    wotd.for_date(TODAY + timedelta(days=3))
+    wotd.for_date(TODAY - timedelta(days=3))
+    assert History.load(history_file).days == {}
+
+
+def test_recent_lists_earlier_days(words_file, tmp_path):
+    history_file = tmp_path / "history.json"
+    History(days={TODAY - timedelta(days=2): "laconic", TODAY: "ephemeral"}).save(history_file)
+    wotd = make(words_file, KnownWords(), history_file=history_file)
+    assert wotd.recent() == [(TODAY - timedelta(days=2), "laconic")]
+
+
+def test_without_a_history_file_picks_are_kept_in_memory(words_file):
+    wotd = make(words_file, KnownWords("ephemeral", "serendipity", "laconic"))
+    word = wotd.today().word
+    words_file.write_text("ephemeral\nserendipity\nlaconic\ncompendious\n", encoding="utf-8")
+    assert wotd.today().word == word
 
 
 def test_empty_word_list_is_an_error(tmp_path):
@@ -147,39 +261,26 @@ def test_empty_word_list_is_an_error(tmp_path):
         make(path, FakeSource("A")).today()
 
 
-def test_from_env_adds_merriam_webster_only_with_a_key(words_file):
-    with WordOfTheDay.from_env(words_file, None, env={}) as wotd:
-        assert [s.name for s in wotd.sources] == ["Free Dictionary API", "Wiktionary", "Datamuse"]
-        assert wotd.cache is None
+# --- Time zone and configuration ---
 
-    env = {"MW_DICTIONARY_KEY": "d", "MW_THESAURUS_KEY": "t"}
-    with WordOfTheDay.from_env(words_file, "cache", env=env) as wotd:
+
+def test_time_zone_decides_the_date(words_file):
+    wotd = WordOfTheDay(words_file, [], timezone="Pacific/Kiritimati")
+    assert wotd.current_date() == datetime.now(ZoneInfo("Pacific/Kiritimati")).date()
+
+
+def test_unknown_time_zone_is_an_error(words_file):
+    with pytest.raises(WordOfTheDayError, match="unknown time zone"):
+        WordOfTheDay(words_file, [], timezone="Mars/Olympus_Mons")
+
+
+def test_from_env(words_file):
+    with WordOfTheDay.from_env(words_file, None, None, env={}) as wotd:
+        assert [s.name for s in wotd.sources] == ["Wiktionary", "Datamuse"]
+        assert wotd.cache is None and wotd.history_file is None and wotd.timezone is None
+
+    env = {"MW_DICTIONARY_KEY": "d", "MW_THESAURUS_KEY": "t", "WOTD_TIMEZONE": "America/Toronto"}
+    with WordOfTheDay.from_env(words_file, env=env) as wotd:
         assert isinstance(wotd.sources[0], MerriamWebsterSource)
         assert wotd.sources[0].provides == {"senses", *FILLABLE_FIELDS}
-
-
-def test_failed_sources_are_skipped_for_a_while(words_file):
-    failing = FakeSource("A", SourceError("A: request failed (ReadTimeout)"))
-    working = FakeSource("B", entry("B", **COMPLETE))
-    wotd = make(words_file, failing, working)
-    wotd.lookup("ephemeral")
-    wotd.lookup("serendipity")
-    assert failing.calls == 1 and working.calls == 2
-
-
-def test_failed_sources_are_retried_after_the_cooldown(words_file):
-    failing = FakeSource("A", SourceError("A: request failed (ReadTimeout)"))
-    working = FakeSource("B", entry("B", **COMPLETE))
-    wotd = WordOfTheDay(words_file, [failing, working], source_cooldown=timedelta(0))
-    wotd.lookup("ephemeral")
-    wotd.lookup("serendipity")
-    assert failing.calls == 2
-
-
-def test_a_skipped_source_means_lookup_failed_not_word_missing(words_file):
-    failing = FakeSource("A", SourceError("A: server error (HTTP 503)"))
-    wotd = make(words_file, failing)
-    with pytest.raises(LookupFailedError):
-        wotd.lookup("ephemeral")
-    with pytest.raises(LookupFailedError, match="skipped after a recent failure"):
-        wotd.lookup("serendipity")
+        assert wotd.timezone == ZoneInfo("America/Toronto")

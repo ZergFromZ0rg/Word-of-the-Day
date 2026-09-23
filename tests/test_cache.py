@@ -4,7 +4,9 @@ from datetime import timedelta
 from word_of_day.cache import JsonFileCache
 from word_of_day.models import Sense, WordEntry
 
-ENTRY = WordEntry("déjà vu", [Sense("a feeling of having already experienced the present", "noun")], sources=["X"])
+ENTRY = WordEntry(
+    "déjà vu", [Sense("a feeling of having already experienced the present", "noun")], sources=["X"]
+)
 
 
 def test_round_trip(tmp_path):

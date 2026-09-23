@@ -13,7 +13,7 @@ from pathlib import Path
 from .models import WordEntry
 
 # Bump when the stored format changes; older files are then treated as misses.
-CACHE_VERSION = 1
+CACHE_VERSION = 2  # 2: added etymology and first_known_use
 
 log = logging.getLogger(__name__)
 

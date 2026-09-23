@@ -20,7 +20,9 @@ class DatamuseSource(DictionarySource):
         antonyms = self._related(word, "rel_ant")
         if not synonyms and not antonyms:
             return None
-        return WordEntry(word=word, senses=[], synonyms=synonyms, antonyms=antonyms, sources=[self.name])
+        return WordEntry(
+            word=word, senses=[], synonyms=synonyms, antonyms=antonyms, sources=[self.name]
+        )
 
     def _related(self, word: str, relation: str) -> list[str]:
         data = self.get_json(URL, params={relation: word, "max": str(MAX_RELATED_WORDS)})
