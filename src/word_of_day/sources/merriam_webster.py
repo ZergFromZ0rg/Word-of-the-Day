@@ -10,6 +10,8 @@ Quirks handled here:
 - A lookup also returns entries for related words and phrases ("ephemeral pond"),
   so entries are filtered by headword.
 - Definition text is full of formatting tokens like {bc}, {it}...{/it}, {sx|word||}.
+- Without a thesaurus key, synonyms can still come from the dictionary's synonym
+  discussion ("syns"), which only some words have.
 """
 
 from __future__ import annotations
@@ -42,7 +44,8 @@ class MerriamWebsterSource(DictionarySource):
         self.thesaurus_key = thesaurus_key
         provides = {"senses", *FILLABLE_FIELDS}
         if not thesaurus_key:
-            provides -= {"synonyms", "antonyms"}
+            # The dictionary alone has synonyms for some words, but never antonyms.
+            provides -= {"antonyms"}
         self.provides = frozenset(provides)
 
     def lookup(self, word: str) -> WordEntry | None:
@@ -60,8 +63,11 @@ class MerriamWebsterSource(DictionarySource):
                 # The definitions are still good; other sources can supply synonyms.
                 log.warning("%s (thesaurus); continuing without synonyms", exc)
             else:
-                thesaurus = matching_entries(data, entry.word)
-                entry.synonyms, entry.antonyms = parse_thesaurus(thesaurus, entry.word)
+                synonyms, entry.antonyms = parse_thesaurus(
+                    matching_entries(data, entry.word), entry.word
+                )
+                # The thesaurus list is fuller than the dictionary's synonym discussion.
+                entry.synonyms = synonyms or entry.synonyms
         return entry
 
     def _get(self, url: str, word: str, key: str) -> Any:
@@ -118,6 +124,7 @@ def parse_dictionary(entries: list[dict[str, Any]]) -> WordEntry:
         senses=senses,
         pronunciation=pronunciation,
         audio_url=audio_url,
+        synonyms=_discussed_synonyms(entries, word),
         etymology=etymology,
         first_known_use=first_known_use,
         source_url=PAGE_URL.format(word=url_path_word(word)),
@@ -209,6 +216,22 @@ def _attribution(quote: Any) -> str:
     return ", ".join(clean_markup(p) for p in parts if p)
 
 
+def _discussed_synonyms(entries: list[dict[str, Any]], word: str) -> list[str]:
+    """Words compared in the entry's synonym discussion, if it has one.
+
+    "syns": [{"pt": [["text", "{sc}transient{/sc} {sc}transitory{/sc} ... mean lasting..."]]}]
+    """
+    words = [
+        match
+        for entry in entries
+        for discussion in entry.get("syns", [])
+        for item in discussion.get("pt", [])
+        if isinstance(item, list) and item[:1] == ["text"]
+        for match in _SMALL_CAPS.findall(item[1])
+    ]
+    return unique(words, exclude=[word], limit=MAX_RELATED_WORDS)
+
+
 def _etymology(entry: dict[str, Any]) -> str:
     # "et": [["text", "Greek {it}ephēmeros{/it} ..."], ["et_snote", [...]]]
     texts = [
@@ -257,6 +280,8 @@ def audio_url(name: str) -> str:
 _DROPPED_GROUPS = re.compile(r"\{(dx|dx_def|dx_ety|ma)\}.*?\{/\1\}", re.S)
 # Link tokens keep only their display text: {sx|transient||} -> transient.
 _LINKS = re.compile(r"\{(?:a_link|d_link|i_link|et_link|mat|sx|dxt)\|([^|}]*)[^}]*\}")
+# In synonym discussions, the words being compared are set in small caps.
+_SMALL_CAPS = re.compile(r"\{sc\}(.*?)\{/sc\}")
 # Anything else ({it}, {/it}, {wi}, {ds||1||}...) is formatting: remove the token, keep the text.
 _ANY_TOKEN = re.compile(r"\{[^}]*\}")
 _REPLACEMENTS = {"{bc}": "; ", "{ldquo}": "“", "{rdquo}": "”", "{p_br}": " "}

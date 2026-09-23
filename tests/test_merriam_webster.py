@@ -114,13 +114,14 @@ def test_lookup_combines_dictionary_and_thesaurus():
     assert [r.url.params["key"] for r in api.requests] == ["dict-key", "thes-key"]
 
 
-def test_without_thesaurus_key_only_the_dictionary_is_called():
+def test_without_thesaurus_key_synonyms_come_from_the_dictionary():
     api = mw_api()
     source = MerriamWebsterSource(api.client(), "dict-key")
     entry = source.lookup("ephemeral")
-    assert entry.synonyms == []
+    assert entry.synonyms == ["transient", "fleeting"]
+    assert entry.antonyms == []
     assert len(api.requests) == 1
-    assert "synonyms" not in source.provides
+    assert "synonyms" in source.provides and "antonyms" not in source.provides
 
 
 def test_spelling_suggestions_mean_not_found():
@@ -147,7 +148,7 @@ def test_rate_limit_is_a_source_error():
 def test_thesaurus_failure_keeps_the_definitions():
     api = mw_api(thesaurus=httpx.Response(500))
     entry = MerriamWebsterSource(api.client(), "key", "key").lookup("ephemeral")
-    assert entry.senses and entry.synonyms == []
+    assert entry.senses and entry.synonyms == ["transient", "fleeting"]
 
 
 def test_form_without_its_own_entry_uses_the_base_word():
