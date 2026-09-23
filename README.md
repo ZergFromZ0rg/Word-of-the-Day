@@ -91,24 +91,62 @@ entry.to_dict()  # JSON-ready dict
 
 `from_env` reads settings from environment variables and uses `cache/` and
 `history.json` by default (pass `None` to turn either off). It doesn't load `.env`
-itself; your app decides how configuration gets in. A FastAPI endpoint, for example:
+itself; your app decides how configuration gets in.
 
-```python
-from fastapi import FastAPI, HTTPException
+## HTTP API
 
-from word_of_day import WordOfTheDay, WordOfTheDayError
+For the homepage. Install the optional API dependencies, then start the server:
 
-app = FastAPI()
-wotd = WordOfTheDay.from_env("words.txt")
-
-
-@app.get("/word-of-the-day")
-def word_of_the_day():  # sync endpoint: FastAPI runs it in a thread pool
-    try:
-        return wotd.today().to_dict()
-    except WordOfTheDayError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+```bash
+pip install -e ".[api]"
+word-of-the-day-api                  # http://127.0.0.1:8000, interactive docs at /docs
 ```
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /word-of-the-day` | `{"date": "2026-09-23", "entry": {...}}` for today |
+| `GET /word-of-the-day/{YYYY-MM-DD}` | the same for another date (future dates are a preview) |
+| `GET /words/{word}` | the entry for any word |
+| `GET /recent?days=7` | `[{"date": ..., "word": ...}]` for earlier days, most recent first |
+| `GET /widget` | today's word as flat strings, for dashboard widgets |
+| `GET /health` | `{"status": "ok", "version": ..., "today": ..., "words": 30}` |
+
+`entry` has the same fields as `WordEntry` above. Errors come back as
+`{"detail": "..."}` with 404 (no dictionary has the word), 502 (dictionaries
+unreachable) or 500 (configuration problem, such as a missing word list).
+
+It uses the same settings as the command line, plus `WOTD_HOST` (default `127.0.0.1`;
+use `0.0.0.0` to accept other machines), `WOTD_PORT` (default `8000`) and
+`WOTD_CORS_ORIGINS` (default `*`, which lets any web page call it). From the homepage:
+
+```js
+const res = await fetch("http://homelab.local:8000/word-of-the-day");
+const { date, entry } = await res.json();
+// entry.word, entry.pronunciation, entry.senses[0].definition, entry.audio_url ...
+```
+
+For more uvicorn options (workers, TLS, reload), run it directly:
+`uvicorn --factory word_of_day.api:app_from_env --host 0.0.0.0`.
+
+## Optional: Homepage dashboard integration
+
+Nothing here is required; the library, CLI and API work on their own. If you run
+[Homepage](https://gethomepage.dev), `integrations/homepage/` has two files:
+
+1. `docker-compose.yml` runs the API in a container (word list, history and cache live
+   in a volume; set your time zone and optional Merriam-Webster keys in it):
+   ```bash
+   docker compose -f integrations/homepage/docker-compose.yml up -d --build
+   ```
+2. `services.yaml` is a ready-made `customapi` widget for Homepage. It reads
+   `GET /widget`, which returns today's word as flat strings (`word`, `definition`,
+   `pronunciation`, `part_of_speech`, `example`, `synonyms`, `etymology`, ...) so the
+   widget needs no nested lookups. Put both containers on the same Docker network, or
+   change the URL to `host:8000`.
+
+Edit the word list inside the volume: `docker exec -it word-of-the-day sh -c 'cat >> /data/words.txt'`,
+or run `docker exec word-of-the-day word-of-the-day --import-mw-wotd` to grow it from
+Merriam-Webster's feed.
 
 ## How it works
 
@@ -177,6 +215,7 @@ src/word_of_day/
 ├── feed.py            Merriam-Webster Word of the Day RSS import
 ├── formatting.py      terminal output
 ├── cli.py             command-line interface
+├── api.py             HTTP API (FastAPI)
 └── sources/
     ├── base.py            DictionarySource interface, HTTP error handling
     ├── merriam_webster.py
@@ -208,6 +247,5 @@ attribution.
 
 ## Next steps
 
-- FastAPI service wrapping the library (see the example above)
-- Docker image for the homelab (mount `cache/` and `history.json`, set `WOTD_TIMEZONE`)
+- The homepage widget: word, definition, pronunciation button, quiz card
 - SQLite in place of the JSON files
