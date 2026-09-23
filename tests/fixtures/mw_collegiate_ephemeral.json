@@ -1,0 +1,90 @@
+[
+  {
+    "meta": {
+      "id": "ephemeral:1",
+      "uuid": "00000000-0000-0000-0000-000000000001",
+      "src": "collegiate",
+      "section": "alpha",
+      "stems": ["ephemeral", "ephemerally", "ephemeralness"],
+      "offensive": false
+    },
+    "hom": 1,
+    "hwi": {
+      "hw": "ephem*er*al",
+      "prs": [
+        {"mw": "i-ˈfem-rəl", "sound": {"audio": "epheme02", "ref": "c", "stat": "1"}},
+        {"mw": "-ˈfe-mə-", "sound": {"audio": "epheme01", "ref": "c", "stat": "1"}}
+      ]
+    },
+    "fl": "adjective",
+    "def": [
+      {
+        "sseq": [
+          [["sense", {"sn": "1", "dt": [["text", "{bc}lasting one day only "], ["vis", [{"t": "an {wi}ephemeral{/wi} fever"}]]]}]],
+          [["sense", {"sn": "2", "dt": [
+            ["text", "{bc}lasting a very short time {dx}compare {dxt|transient||}{/dx}"],
+            ["vis", [
+              {"t": "{wi}ephemeral{/wi} pleasures"},
+              {"t": "the {it}ephemeral{/it} nature of fame", "aq": {"auth": "A. Writer", "source": "{it}A Book{/it}", "aqdate": "1999"}}
+            ]]
+          ]}]]
+        ]
+      }
+    ],
+    "shortdef": ["lasting one day only", "lasting a very short time"]
+  },
+  {
+    "meta": {
+      "id": "ephemeral:2",
+      "uuid": "00000000-0000-0000-0000-000000000002",
+      "src": "collegiate",
+      "section": "alpha",
+      "stems": ["ephemeral", "ephemerals"],
+      "offensive": false
+    },
+    "hom": 2,
+    "hwi": {"hw": "ephemeral"},
+    "fl": "noun",
+    "def": [
+      {
+        "sseq": [
+          [
+            ["bs", {"sense": {"sn": "1", "dt": [["text", "{bc}something ephemeral: such as"]]}}],
+            ["sense", {"sn": "a", "dt": [["text", "{bc}an {sx|ephemeron||} "]]}]
+          ],
+          [
+            ["sen", {"sn": "2", "sls": ["chiefly British"]}],
+            ["pseq", [
+              ["sense", {"sn": "(1)", "dt": [
+                ["text", "{bc}a printed item meant to be discarded "],
+                ["uns", [[["text", "usually used in plural "], ["vis", [{"t": "collectors of {wi}ephemerals{/wi}"}]]]]]
+              ]}]
+            ]]
+          ],
+          [
+            ["sense", {
+              "sn": "3",
+              "dt": [["text", "{bc}a short-lived plant"]],
+              "sdsense": {"sd": "specifically", "dt": [["text", "{bc}one that completes its life cycle in a single season"]]}
+            }]
+          ]
+        ]
+      }
+    ],
+    "shortdef": ["something ephemeral"]
+  },
+  {
+    "meta": {
+      "id": "ephemera",
+      "uuid": "00000000-0000-0000-0000-000000000003",
+      "src": "collegiate",
+      "section": "alpha",
+      "stems": ["ephemera"],
+      "offensive": false
+    },
+    "hwi": {"hw": "ephem*era"},
+    "fl": "noun",
+    "def": [{"sseq": [[["sense", {"dt": [["text", "{bc}paper items of short-lived interest"]]}]]]}],
+    "shortdef": ["paper items of short-lived interest"]
+  }
+]

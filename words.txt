@@ -1,0 +1,32 @@
+# One word or phrase per line. Blank lines and lines starting with # are ignored.
+# Order doesn't matter: the daily pick is a shuffle of the whole list.
+serendipity
+ephemeral
+ubiquitous
+mellifluous
+perspicacious
+sonorous
+petrichor
+laconic
+sanguine
+quixotic
+ineffable
+halcyon
+obfuscate
+pernicious
+esoteric
+equanimity
+magnanimous
+sycophant
+cacophony
+ebullient
+lugubrious
+recalcitrant
+insouciant
+verisimilitude
+anachronism
+panacea
+juxtapose
+zeitgeist
+loquacious
+epiphany

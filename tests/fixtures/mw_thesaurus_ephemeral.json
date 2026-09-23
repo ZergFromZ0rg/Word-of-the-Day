@@ -1,0 +1,21 @@
+[
+  {
+    "meta": {
+      "id": "ephemeral",
+      "uuid": "00000000-0000-0000-0000-000000000010",
+      "src": "coll_thes",
+      "section": "alpha",
+      "stems": ["ephemeral"],
+      "syns": [
+        ["evanescent", "fleeting", "fugitive", "momentary", "passing", "short-lived", "transient", "transitory"],
+        ["Fleeting", "brief", "ephemeral"]
+      ],
+      "ants": [["enduring", "lasting", "permanent", "perpetual"]],
+      "offensive": false
+    },
+    "hwi": {"hw": "ephemeral"},
+    "fl": "adjective",
+    "def": [{"sseq": [[["sense", {"dt": [["text", "lasting only for a short time"]]}]]]}],
+    "shortdef": ["lasting only for a short time"]
+  }
+]
