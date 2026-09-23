@@ -6,6 +6,7 @@ Endpoints (interactive docs at /docs):
     GET /word-of-the-day/{date}   the word for a date (YYYY-MM-DD; future dates are a preview)
     GET /words/{word}             any word
     GET /recent?days=7            earlier days' words, most recent first (e.g. for a quiz)
+    GET /widget                   today's word as a flat object, for dashboard widgets
     GET /health                   liveness check for Docker and monitors
 
 Configured with the same environment variables as the CLI (a .env file in the working
@@ -42,6 +43,23 @@ class DailyWord:
 class PastWord:
     date: dt.date
     word: str
+
+
+@dataclass
+class Widget:
+    """Today's word flattened to plain strings, for dashboards that can't index into lists."""
+
+    date: dt.date
+    word: str
+    pronunciation: str
+    part_of_speech: str
+    definition: str
+    example: str
+    synonyms: str
+    etymology: str
+    first_known_use: str
+    source: str
+    url: str
 
 
 @dataclass
@@ -93,6 +111,25 @@ def create_app(wotd: WordOfTheDay | None = None) -> FastAPI:
     @app.get("/recent")
     def recent(wotd: Service, days: Annotated[int, Query(ge=1, le=365)] = 7) -> list[PastWord]:
         return [PastWord(date=day, word=word) for day, word in wotd.recent(days)]
+
+    @app.get("/widget")
+    def widget(wotd: Service) -> Widget:
+        day = wotd.current_date()
+        entry = wotd.for_date(day)
+        first = entry.senses[0]
+        return Widget(
+            date=day,
+            word=entry.word,
+            pronunciation=entry.pronunciation or "",
+            part_of_speech=first.part_of_speech or "",
+            definition=first.definition,
+            example=(first.examples or entry.examples or [""])[0],
+            synonyms=", ".join(entry.synonyms[:6]),
+            etymology=entry.etymology or "",
+            first_known_use=entry.first_known_use or "",
+            source=", ".join(entry.sources),
+            url=entry.source_url or "",
+        )
 
     @app.get("/health")
     def health(wotd: Service) -> Health:
