@@ -7,7 +7,7 @@ Quirks handled here:
 - An unknown word returns HTTP 200 with a list of spelling suggestions (strings)
   in place of entry objects, not a 404.
 - A bad key returns HTTP 200 with a plain-text error, not JSON.
-- A lookup also returns entries for related words ("ephemerally", phrases...),
+- A lookup also returns entries for related words and phrases ("ephemeral pond"),
   so entries are filtered by headword.
 - Definition text is full of formatting tokens like {bc}, {it}...{/it}, {sx|word||}.
 """
@@ -88,7 +88,8 @@ def matching_entries(data: Any, word: str) -> list[dict[str, Any]]:
     exact = [e for e in entries if headword(e).casefold() == word.casefold()]
     if exact:
         return exact
-    # An inflected form like "ran" returns entries for "run": keep the best match.
+    # A form without its own entry, like "ephemerals", returns entries for the base
+    # word ("ephemeral:2"): keep the best match.
     best = headword(entries[0])
     return [e for e in entries if headword(e) == best]
 

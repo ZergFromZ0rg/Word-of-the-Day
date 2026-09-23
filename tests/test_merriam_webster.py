@@ -150,15 +150,25 @@ def test_thesaurus_failure_keeps_the_definitions():
     assert entry.senses and entry.synonyms == []
 
 
-def test_inflected_form_uses_the_base_word():
+def test_form_without_its_own_entry_uses_the_base_word():
+    # Looking up "ephemerals" returns only the base word's noun entry.
     data = [
+        {"meta": {"id": "ephemeral:2"}, "fl": "noun", "shortdef": ["something short-lived"]},
+        {"meta": {"id": "ephemeral pond"}, "fl": "noun", "shortdef": ["a seasonal pond"]},
+    ]
+    entry = parse_dictionary(matching_entries(data, "ephemerals"))
+    assert entry.word == "ephemeral"
+    assert entry.senses == [Sense("something short-lived", "noun")]
+
+
+def test_form_with_its_own_cross_reference_entry():
+    # "ran" has a small entry of its own that only points at "run", with no part of speech.
+    data = [
+        {"meta": {"id": "ran"}, "cxs": [{"cxl": "past tense of", "cxtis": [{"cxt": "run"}]}]},
         {"meta": {"id": "run:1"}, "fl": "verb", "shortdef": ["to go faster than a walk"]},
-        {"meta": {"id": "run:2"}, "fl": "noun", "shortdef": ["an act or the activity of running"]},
-        {"meta": {"id": "runner"}, "fl": "noun", "shortdef": ["one that runs"]},
     ]
     entry = parse_dictionary(matching_entries(data, "ran"))
-    assert entry.word == "run"
-    assert [s.part_of_speech for s in entry.senses] == ["verb", "noun"]
+    assert entry.senses == [Sense("past tense of run")]
 
 
 def test_cross_reference_only_entry():
