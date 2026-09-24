@@ -175,9 +175,21 @@ Once every word has been used, the pick comes at random from the half of the lis
 saw longest ago. Words just added to the list therefore come up soon, and nothing
 repeats two days in a row. Picks are deterministic, so separate processes agree.
 
+**Word source.** `WOTD_WORD_SOURCE=merriam` (or `--source merriam`) takes each day's word
+from Merriam-Webster's Word of the Day feed (about the last 10 days are available, so
+`--date` works for those too) and uses your list only as a fallback when the feed is down,
+hasn't posted yet (it publishes around 1 a.m. US Eastern) or the word can't be looked up.
+A word already recorded for today always stands, so a fallback word chosen before the
+feed posted stays for that day.
+
+**Changing sources.** Cached lookups remember which dictionaries were configured. Adding
+or removing a Merriam-Webster key makes the old entries stale, so they're fetched again
+instead of showing outdated data for up to 30 days.
+
 **Unknown words.** If no dictionary has the chosen word, it's recorded under
 `not_found` in the history and never picked again, and another word is chosen instead.
-`--check` lists these so you can fix or remove them.
+`--check` lists these so you can fix or remove them, and forgets any that are findable now
+(for example after you add an API key). Uploading a word list also forgets them.
 
 **Combining sources.** Definitions all come from the first source that has any, because
 senses from different dictionaries don't line up. If that entry is missing synonyms,

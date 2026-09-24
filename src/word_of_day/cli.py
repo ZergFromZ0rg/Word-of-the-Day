@@ -35,11 +35,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.import_mw_wotd:
             return _import_mw_wotd(words_file)
-        with WordOfTheDay.from_env(words_file, cache_dir, history_file) as wotd:
+        with WordOfTheDay.from_env(
+            words_file, cache_dir, history_file, word_source=args.source
+        ) as wotd:
             if args.check:
                 return _check(wotd, refresh=args.refresh)
             if args.quiz:
                 return _quiz(wotd)
+            if args.history:
+                return _history(wotd)
             if args.word:
                 day = None
                 entry = wotd.lookup(args.word, refresh=args.refresh)
@@ -65,6 +69,7 @@ def _check(wotd: WordOfTheDay, *, refresh: bool) -> int:
     """Look up every word in the list (which also fills the cache) and report problems."""
     words = wotd.words()
     problems = 0
+    found = []
     for word in words:
         try:
             entry = wotd.lookup(word, refresh=refresh)
@@ -75,9 +80,21 @@ def _check(wotd: WordOfTheDay, *, refresh: bool) -> int:
             problems += 1
             print(f"? {word}: {exc}")
         else:
+            found.append(word)
             print(f"✓ {word}  ({', '.join(entry.sources)})")
+    wotd.clear_not_found(found)  # words found now (e.g. after adding a key) can be picked
     print(f"\n{len(words) - problems}/{len(words)} words found")
     return 1 if problems else 0
+
+
+def _history(wotd: WordOfTheDay) -> int:
+    """Print the words shown on earlier days, most recent first."""
+    recent = wotd.recent(365)
+    if not recent:
+        print("No earlier words yet.")
+    for day, word in recent:
+        print(f"{day}  {word}")
+    return 0
 
 
 def _quiz(wotd: WordOfTheDay) -> int:
@@ -127,10 +144,17 @@ def _parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--quiz", action="store_true", help="test yourself on a word from the past week"
     )
+    mode.add_argument("--history", action="store_true", help="list the words shown on earlier days")
     mode.add_argument(
         "--import-mw-wotd",
         action="store_true",
         help="add recent Merriam-Webster Words of the Day to the word list",
+    )
+    parser.add_argument(
+        "--source",
+        choices=["list", "merriam"],
+        help="where the day's word comes from: your list, or Merriam-Webster's own Word "
+        "of the Day (default: $WOTD_WORD_SOURCE or list)",
     )
     parser.add_argument("--json", action="store_true", help="print JSON instead of text")
     parser.add_argument(

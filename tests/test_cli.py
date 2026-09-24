@@ -27,14 +27,20 @@ class StubSource(DictionarySource):
         )
 
 
+seen: dict = {}
+
+
 @pytest.fixture(autouse=True)
 def offline(tmp_path, monkeypatch):
     """Run the CLI in an empty directory with an offline service."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "words.txt").write_text("\n".join(WORDS), encoding="utf-8")
 
-    def from_env(cls, words_file, cache_dir, history_file):
+    def from_env(cls, words_file, cache_dir, history_file, word_source=None):
+        seen["word_source"] = word_source
         return cls(words_file, [StubSource()], history_file=history_file)
+
+    seen.clear()
 
     monkeypatch.setattr(WordOfTheDay, "from_env", classmethod(from_env))
 
@@ -45,6 +51,28 @@ def test_todays_word_is_recorded(tmp_path, capsys):
     assert data["senses"][0]["definition"] == f"meaning of {data['word']}"
     history = History.load(tmp_path / "history.json")
     assert history.days == {date.fromisoformat(data["date"]): data["word"]}
+
+
+def test_source_option_is_passed_on(capsys):
+    assert cli.main(["--word", "ephemeral", "--source", "merriam"]) == 0
+    assert seen["word_source"] == "merriam"
+
+
+def test_history_lists_earlier_days(tmp_path, capsys):
+    History(days={date(2026, 9, 21): "laconic", date(2026, 9, 22): "serendipity"}).save(
+        tmp_path / "history.json"
+    )
+    assert cli.main(["--history"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "2026-09-22  serendipity",
+        "2026-09-21  laconic",
+    ]
+
+
+def test_check_lets_found_words_be_picked_again(tmp_path, capsys):
+    History(not_found={"ephemeral", "qwzxvbn"}).save(tmp_path / "history.json")
+    cli.main(["--check"])
+    assert History.load(tmp_path / "history.json").not_found == {"qwzxvbn"}
 
 
 def test_text_output_for_a_word(capsys):

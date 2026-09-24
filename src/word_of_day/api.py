@@ -91,6 +91,7 @@ class Health:
     version: str
     today: dt.date
     words: int
+    word_source: str
 
 
 def create_app(wotd: WordOfTheDay | None = None) -> FastAPI:
@@ -177,6 +178,7 @@ def create_app(wotd: WordOfTheDay | None = None) -> FastAPI:
         current = wotd.words() if mode == "add" and wotd.words_file.exists() else []
         combined = parse_words("\n".join([*current, *uploaded]))
         save_words(wotd.words_file, combined)
+        wotd.clear_not_found(uploaded)  # give words that were once missing another chance
         return WordList(words=combined, count=len(combined), added=len(combined) - len(current))
 
     @app.get("/manage", response_class=HTMLResponse, include_in_schema=False)
@@ -188,7 +190,11 @@ def create_app(wotd: WordOfTheDay | None = None) -> FastAPI:
     def health(wotd: Service) -> Health:
         # Reading the word list catches the most common misconfiguration (wrong path).
         return Health(
-            status="ok", version=__version__, today=wotd.current_date(), words=len(wotd.words())
+            status="ok",
+            version=__version__,
+            today=wotd.current_date(),
+            words=len(wotd.words()),
+            word_source=wotd.word_source,
         )
 
     return app

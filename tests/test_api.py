@@ -107,6 +107,13 @@ def test_upload_replaces_the_list(make_client, admin, tmp_path):
     assert (tmp_path / "words.txt").read_text(encoding="utf-8") == "sonorous\npetrichor\n"
 
 
+def test_upload_gives_missing_words_another_chance(make_client, admin, tmp_path):
+    History(not_found={"sonorous", "qwzxvbn"}).save(tmp_path / "history.json")
+    with make_client() as client:
+        client.put("/word-list", content=b"sonorous\nlaconic\n", headers=admin)
+    assert History.load(tmp_path / "history.json").not_found == {"qwzxvbn"}
+
+
 def test_upload_can_add_to_the_list(make_client, admin):
     with make_client() as client:
         response = client.put("/word-list?mode=add", content=b"laconic\nsonorous\n", headers=admin)
@@ -131,6 +138,7 @@ def test_manage_page(make_client):
     assert response.headers["content-type"].startswith("text/html")
     assert "default-src 'none'" in response.headers["content-security-policy"]
     assert 'id="token"' in response.text and "/word-list" in response.text
+    assert 'id="edit"' in response.text and "/recent?days=365" in response.text
 
 
 def test_word_for_a_date(make_client):
@@ -190,6 +198,7 @@ def test_health(make_client, tmp_path):
             "version": __version__,
             "today": "2026-09-23",
             "words": 3,
+            "word_source": "list",
         }
         (tmp_path / "words.txt").unlink()
         broken = client.get("/health")
