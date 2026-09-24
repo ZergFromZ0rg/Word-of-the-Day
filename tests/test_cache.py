@@ -18,6 +18,14 @@ def test_round_trip(tmp_path):
     assert not list(tmp_path.glob("*.tmp"))
 
 
+def test_entries_made_by_different_sources_are_misses(tmp_path):
+    cache = JsonFileCache(tmp_path)
+    cache.set("déjà vu", ENTRY, signature="Wiktionary")
+    assert cache.get("déjà vu", "Wiktionary") == ENTRY
+    assert cache.get("déjà vu", "Merriam-Webster;Wiktionary") is None
+    assert cache.get("déjà vu") == ENTRY  # no signature given: not checked
+
+
 def test_expired_entries_are_misses(tmp_path):
     cache = JsonFileCache(tmp_path)
     cache.set("déjà vu", ENTRY, max_age=timedelta(seconds=-1))

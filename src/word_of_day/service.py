@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from collections.abc import Collection, Iterable, Mapping
 from datetime import date, datetime, timedelta, tzinfo
 from pathlib import Path
@@ -15,6 +16,7 @@ import httpx
 from . import __version__
 from .cache import JsonFileCache
 from .errors import LookupFailedError, SourceError, WordNotFoundError, WordOfTheDayError
+from .feed import FeedItem, fetch_feed_items
 from .history import History
 from .models import WordEntry
 from .selector import DEFAULT_SEED, choose_word, load_words
@@ -25,6 +27,10 @@ USER_AGENT = f"word-of-the-day/{__version__} (+https://github.com/ZergFromZ0rg/W
 HTTP_TIMEOUT = 8.0
 # Entries assembled while a source was failing are re-fetched sooner than usual.
 DEGRADED_CACHE_AGE = timedelta(days=1)
+# How long to remember Merriam-Webster's feed (shorter after a failure, so it retries soon).
+FEED_TTL = 1800.0
+FEED_RETRY = 300.0
+WORD_SOURCES = ("list", "merriam")
 # How many unfindable words to skip in a row before giving up on a day.
 MAX_PICKS = 5
 
@@ -48,8 +54,13 @@ class WordOfTheDay:
         timezone: str | tzinfo | None = None,
         seed: str = DEFAULT_SEED,
         client: httpx.Client | None = None,
+        word_source: str = "list",
     ):
         """Wire things up explicitly.
+
+        `word_source` is where each day's word comes from: "list" (your word file) or
+        "merriam" (Merriam-Webster's own Word of the Day, falling back to your list
+        when their feed is unavailable or hasn't posted yet). Needs a `client`.
 
         Without a `history_file`, picks are only remembered while this object lives.
         `timezone` is a name like "America/Toronto"; None means the machine's zone.
@@ -62,8 +73,19 @@ class WordOfTheDay:
         self.timezone = _timezone(timezone)
         self.seed = seed
         self._client = client
+        if word_source not in WORD_SOURCES:
+            raise WordOfTheDayError(
+                f"unknown word source {word_source!r}; use one of: {', '.join(WORD_SOURCES)}"
+            )
+        self.word_source = word_source
         self._memory_history = History()
         self._lock = threading.Lock()
+        self._feed_cache: tuple[float, list[FeedItem]] | None = None
+        # Describes which sources are configured, so a cached entry made without (say)
+        # a Merriam-Webster key isn't served once one is added.
+        self.cache_signature = ";".join(
+            sorted(f"{s.name}:{','.join(sorted(s.provides))}" for s in self.sources)
+        )
 
     @classmethod
     def from_env(
@@ -74,10 +96,11 @@ class WordOfTheDay:
         *,
         env: Mapping[str, str] | None = None,
         seed: str = DEFAULT_SEED,
+        word_source: str | None = None,
     ) -> WordOfTheDay:
         """Build with the default sources and settings from environment variables.
 
-        Reads MW_DICTIONARY_KEY, MW_THESAURUS_KEY and WOTD_TIMEZONE. Pass None for
+        Reads MW_DICTIONARY_KEY, MW_THESAURUS_KEY, WOTD_TIMEZONE and WOTD_WORD_SOURCE. Pass None for
         cache_dir or history_file to turn those off. This doesn't read .env files;
         the CLI does that itself.
         """
@@ -100,6 +123,7 @@ class WordOfTheDay:
             timezone=timezone,
             seed=seed,
             client=client,
+            word_source=word_source or env.get("WOTD_WORD_SOURCE") or "list",
         )
 
     # --- Choosing (no network) ---
@@ -123,7 +147,7 @@ class WordOfTheDay:
         previewed for a future date can still change.
         """
         day = day or self.current_date()
-        return self._pick(self.words(), self._load_history(), day)
+        return self._pick(self._candidate_words(), self._load_history(), day)
 
     def recent(self, count: int = 7) -> list[tuple[date, str]]:
         """Words recorded for days before today, most recent first (e.g. for a quiz)."""
@@ -141,7 +165,7 @@ class WordOfTheDay:
         """
         with self._lock:
             history = self._load_history()
-            words = self.words()
+            words = self._candidate_words()
             skipped: list[str] = []
             changed = False
             try:
@@ -177,14 +201,19 @@ class WordOfTheDay:
         LookupFailedError if sources failed and none of the others found it.
         """
         if self.cache and not refresh:
-            cached = self.cache.get(word)
+            cached = self.cache.get(word, self.cache_signature)
             if cached is not None:
                 log.debug("cache hit for %r", word)
                 return cached
 
         entry, errors = self._fetch(word)
         if self.cache:
-            self.cache.set(word, entry, max_age=DEGRADED_CACHE_AGE if errors else None)
+            self.cache.set(
+                word,
+                entry,
+                max_age=DEGRADED_CACHE_AGE if errors else None,
+                signature=self.cache_signature,
+            )
         return entry
 
     def _fetch(self, word: str) -> tuple[WordEntry, list[SourceError]]:
@@ -237,10 +266,24 @@ class WordOfTheDay:
         self, words: list[str], history: History, day: date, exclude: Collection[str] = ()
     ) -> str:
         recorded = history.days.get(day)
-        still_listed = {w.casefold() for w in words} - {w.casefold() for w in exclude}
-        # A recorded word stands unless it has since been removed from the list.
-        if recorded and recorded.casefold() in still_listed:
-            return recorded
+        skip = {w.casefold() for w in exclude}
+        if self.word_source == "merriam":
+            # Today's recorded word stands; otherwise use Merriam-Webster's, if posted.
+            if recorded and recorded.casefold() not in skip:
+                return recorded
+            featured = self._feed_word(day)
+            if featured and featured.casefold() not in skip | history.not_found:
+                return featured
+            if not words:
+                raise WordOfTheDayError(
+                    "Merriam-Webster's Word of the Day isn't available, "
+                    f"and {self.words_file} has no words to fall back on"
+                )
+        else:
+            # A recorded word stands unless it has since been removed from the list.
+            still_listed = {w.casefold() for w in words} - skip
+            if recorded and recorded.casefold() in still_listed:
+                return recorded
         try:
             return choose_word(
                 words, history.days, day, seed=self.seed, exclude={*history.not_found, *exclude}
@@ -249,6 +292,44 @@ class WordOfTheDay:
             raise WordOfTheDayError(
                 f"no usable words left in {self.words_file}: every word is marked as not found"
             ) from None
+
+    def _candidate_words(self) -> list[str]:
+        """The list to choose from. In "merriam" mode it's only a fallback, so may be empty."""
+        if self.word_source == "list":
+            return self.words()
+        try:
+            return self.words()
+        except (WordOfTheDayError, OSError):
+            return []
+
+    def _feed_word(self, day: date) -> str | None:
+        """Merriam-Webster's Word of the Day for `day`, from their feed (about 10 days)."""
+        if self._client is None:
+            return None
+        now = time.monotonic()
+        if self._feed_cache is None or self._feed_cache[0] <= now:
+            try:
+                self._feed_cache = (now + FEED_TTL, fetch_feed_items(self._client))
+            except SourceError as exc:
+                log.warning("%s", exc)
+                self._feed_cache = (now + FEED_RETRY, [])
+        return next((item.word for item in self._feed_cache[1] if item.day == day), None)
+
+    def clear_not_found(self, words: Iterable[str] | None = None) -> None:
+        """Forget that words weren't found, so they can be picked again.
+
+        `None` forgets all of them. Call it after adding words that were once missing
+        from every dictionary.
+        """
+        with self._lock:
+            history = self._load_history()
+            before = set(history.not_found)
+            if words is None:
+                history.not_found.clear()
+            else:
+                history.not_found -= {w.casefold() for w in words}
+            if history.not_found != before:
+                self._save_history(history)
 
     def _load_history(self) -> History:
         if self.history_file is None:

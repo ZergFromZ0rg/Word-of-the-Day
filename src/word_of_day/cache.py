@@ -13,7 +13,7 @@ from pathlib import Path
 from .models import WordEntry
 
 # Bump when the stored format changes; older files are then treated as misses.
-CACHE_VERSION = 2  # 2: added etymology and first_known_use
+CACHE_VERSION = 3  # 3: records which sources were configured; 2: etymology fields
 
 log = logging.getLogger(__name__)
 
@@ -24,11 +24,15 @@ class JsonFileCache:
         self.directory = Path(directory)
         self.max_age = max_age
 
-    def get(self, word: str) -> WordEntry | None:
+    def get(self, word: str, signature: str | None = None) -> WordEntry | None:
+        """The cached entry, unless it's missing, expired, or made by a different set of
+        sources than `signature` describes (e.g. before a Merriam-Webster key was added)."""
         path = self._path(word)
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
             if record.get("version") != CACHE_VERSION or record.get("query") != word:
+                return None
+            if signature is not None and record.get("signature") != signature:
                 return None
             expires_at = record.get("expires_at")
             if expires_at and datetime.fromisoformat(expires_at) <= datetime.now(timezone.utc):
@@ -40,13 +44,20 @@ class JsonFileCache:
             log.warning("ignoring unreadable cache file %s (%s)", path, exc)
             return None
 
-    def set(self, word: str, entry: WordEntry, max_age: timedelta | None = None) -> None:
+    def set(
+        self,
+        word: str,
+        entry: WordEntry,
+        max_age: timedelta | None = None,
+        signature: str | None = None,
+    ) -> None:
         """Store `entry` for `word`. `max_age` overrides the cache default for this entry."""
         now = datetime.now(timezone.utc)
         age = max_age or self.max_age
         record = {
             "version": CACHE_VERSION,
             "query": word,
+            "signature": signature,
             "fetched_at": now.isoformat(),
             "expires_at": (now + age).isoformat() if age else None,
             "entry": entry.to_dict(),

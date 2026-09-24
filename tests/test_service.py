@@ -2,6 +2,7 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 
 from word_of_day.cache import JsonFileCache
@@ -17,6 +18,7 @@ from word_of_day.service import WordOfTheDay
 from word_of_day.sources import DictionarySource, MerriamWebsterSource
 
 TODAY = date(2026, 9, 23)
+WORDS = ["ephemeral", "serendipity", "laconic"]
 COMPLETE = dict(
     synonyms=["fleeting"], antonyms=["lasting"], pronunciation="/x/", audio_url="https://a/x.mp3"
 )
@@ -284,3 +286,121 @@ def test_from_env(words_file):
         assert isinstance(wotd.sources[0], MerriamWebsterSource)
         assert wotd.sources[0].provides == {"senses", *FILLABLE_FIELDS}
         assert wotd.timezone == ZoneInfo("America/Toronto")
+
+
+# --- Cache after changing sources ---
+
+
+def test_cache_from_other_sources_is_not_reused(words_file, tmp_path):
+    cache = JsonFileCache(tmp_path / "cache")
+    free = FakeSource("Free", entry("Free"), provides={"senses"})
+    WordOfTheDay(words_file, [free], cache).lookup("ephemeral")
+
+    # Same source set: served from the cache.
+    same = FakeSource("Free", entry("Free"), provides={"senses"})
+    WordOfTheDay(words_file, [same], cache).lookup("ephemeral")
+    assert same.calls == 0
+
+    # A Merriam-Webster key was added: fetched again instead of showing the old entry.
+    upgraded = FakeSource("Merriam-Webster", entry("Merriam-Webster", **COMPLETE))
+    result = WordOfTheDay(words_file, [upgraded, free], cache).lookup("ephemeral")
+    assert upgraded.calls == 1 and result.sources == ["Merriam-Webster"]
+
+
+# --- Forgetting words that weren't found ---
+
+
+def test_clear_not_found(words_file, tmp_path):
+    history_file = tmp_path / "history.json"
+    History(not_found={"ephemeral", "laconic", "qwzxvbn"}).save(history_file)
+    wotd = make(words_file, KnownWords(), history_file=history_file)
+    wotd.clear_not_found(["Ephemeral"])
+    assert History.load(history_file).not_found == {"laconic", "qwzxvbn"}
+    wotd.clear_not_found()
+    assert History.load(history_file).not_found == set()
+
+
+# --- Merriam-Webster's own Word of the Day as the source ---
+
+FEED_XML = (
+    "<rss><channel>"
+    "<item><title>compendious</title><link>https://m.com/wotd/compendious-2026-09-23</link></item>"
+    "<item><title>nemesis</title><link>https://m.com/wotd/nemesis-2026-09-22</link></item>"
+    "</channel></rss>"
+)
+
+
+def merriam_mode(words_file, source, feed=None, history_file=None):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if feed is None:
+            return httpx.Response(503)
+        return httpx.Response(200, text=feed)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    wotd = WordOfTheDay(
+        words_file, [source], history_file=history_file, client=client, word_source="merriam"
+    )
+    wotd.current_date = lambda: TODAY
+    return wotd, calls
+
+
+def test_merriam_mode_uses_their_word_for_the_day(words_file, tmp_path):
+    source = KnownWords("compendious", "nemesis", "ephemeral", "serendipity", "laconic")
+    wotd, calls = merriam_mode(words_file, source, FEED_XML, tmp_path / "history.json")
+    assert wotd.today().word == "compendious"
+    assert wotd.for_date(TODAY - timedelta(days=1)).word == "nemesis"
+    assert len(calls) == 1  # the feed is fetched once, then remembered
+    assert History.load(tmp_path / "history.json").days == {TODAY: "compendious"}
+
+
+def test_merriam_mode_needs_no_word_list(tmp_path):
+    missing = tmp_path / "nope.txt"
+    wotd, _ = merriam_mode(missing, KnownWords("compendious"), FEED_XML)
+    assert wotd.today().word == "compendious"
+
+
+def test_merriam_mode_falls_back_to_the_list(words_file):
+    source = KnownWords("ephemeral", "serendipity", "laconic")
+    # The feed is down.
+    wotd, _ = merriam_mode(words_file, source, feed=None)
+    assert wotd.today().word in WORDS
+    # The feed doesn't have today yet.
+    old_feed = FEED_XML.replace("2026-09-23", "2026-09-20")
+    wotd, _ = merriam_mode(words_file, source, old_feed)
+    assert wotd.today().word in WORDS
+    # Their word isn't in any dictionary we can reach.
+    wotd, _ = merriam_mode(words_file, KnownWords("ephemeral", "serendipity", "laconic"), FEED_XML)
+    assert wotd.today().word in WORDS
+
+
+def test_merriam_mode_without_feed_or_list_is_an_error(tmp_path):
+    wotd, _ = merriam_mode(tmp_path / "nope.txt", KnownWords(), feed=None)
+    with pytest.raises(WordOfTheDayError, match="isn't available"):
+        wotd.today()
+
+
+def test_todays_word_stays_when_switching_source(words_file, tmp_path):
+    history_file = tmp_path / "history.json"
+    source = KnownWords("compendious", "ephemeral", "serendipity", "laconic")
+    listed = make(words_file, source, history_file=history_file).today().word
+    assert listed in WORDS
+    wotd, _ = merriam_mode(words_file, source, FEED_XML, history_file)
+    assert wotd.today().word == listed  # already shown today; Merriam-Webster starts tomorrow
+    assert wotd.for_date(TODAY + timedelta(days=0)).word == listed
+
+
+def test_unknown_word_source(words_file):
+    with pytest.raises(WordOfTheDayError, match="unknown word source"):
+        WordOfTheDay(words_file, [], word_source="random")
+
+
+def test_from_env_reads_the_word_source(words_file):
+    with WordOfTheDay.from_env(words_file, None, None, env={"WOTD_WORD_SOURCE": "merriam"}) as w:
+        assert w.word_source == "merriam"
+    with WordOfTheDay.from_env(
+        words_file, None, None, env={"WOTD_WORD_SOURCE": "merriam"}, word_source="list"
+    ) as w:
+        assert w.word_source == "list"

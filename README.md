@@ -76,6 +76,17 @@ word-of-the-day-api        # http://127.0.0.1:8000, docs at /docs
 `GET /word-of-the-day` returns today's word as JSON. `GET /widget` returns it as flat
 fields for dashboards.
 
+## Where the word comes from
+
+By default the word comes from your list, and each word is used once before any repeats.
+To use **Merriam-Webster's own Word of the Day** instead, set `WOTD_WORD_SOURCE=merriam`
+in `.env` (or run with `--source merriam`). If their feed is down or hasn't posted yet,
+your list is the fallback. Whatever was shown today stays for the rest of the day, so
+switching takes effect tomorrow.
+
+`word-of-the-day --history` lists every word shown so far, and `/manage` shows the same
+list in a browser.
+
 ## Use your own word list
 
 - **Terminal:** put words in any text file (one per line) and run
@@ -87,8 +98,9 @@ fields for dashboards.
   ```
   This replaces the list. Add `?mode=add` to append instead. Uploads are disabled
   unless the token is set.
-- **In a browser:** open `http://localhost:8000/manage` to see today's word and upload
-  a file with a button (you type the token each time; it's never stored).
+- **In a browser:** open `http://localhost:8000/manage` to see today's word, the words
+  shown before, and the list. Upload a file, or click **Edit current list**, change it,
+  and click **Replace list** (you type the token each time; it's never stored).
 
 ## Homepage dashboard (optional)
 

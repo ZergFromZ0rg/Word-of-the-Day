@@ -44,7 +44,7 @@ MANAGE_PAGE = """<!doctype html>
   button:disabled { opacity: .5; cursor: default; }
   #status { min-height: 1.4rem; margin-top: .6rem; }
   .ok { color: var(--ok); } .bad { color: var(--bad); }
-  #list { columns: 2; margin: .5rem 0 0; padding-left: 1.2rem; font-size: .9rem; }
+  #list, #shown-list { columns: 2; margin: .5rem 0 0; padding-left: 1.2rem; font-size: .9rem; }
   details summary { cursor: pointer; }
 </style>
 </head>
@@ -70,8 +70,18 @@ MANAGE_PAGE = """<!doctype html>
   <div class="row">
     <button class="primary" id="replace">Replace list</button>
     <button id="add">Add to list</button>
+    <button id="edit" title="Fill the box with the current list so you can edit it">
+      Edit current list
+    </button>
   </div>
   <div id="status" role="status"></div>
+</section>
+
+<section>
+  <details id="shown">
+    <summary><span id="shown-count">Previously shown</span></summary>
+    <ul id="shown-list"></ul>
+  </details>
 </section>
 
 <section>
@@ -86,10 +96,17 @@ const $ = (id) => document.getElementById(id);
 
 async function load() {
   try {
-    const [word, list] = await Promise.all([
+    const [word, list, shown] = await Promise.all([
       fetch("/widget").then((r) => r.json()),
       fetch("/word-list").then((r) => r.json()),
+      fetch("/recent?days=365").then((r) => r.json()),
     ]);
+    $("shown-count").textContent = `Previously shown (${shown.length})`;
+    $("shown-list").replaceChildren(...shown.map((s) => {
+      const li = document.createElement("li");
+      li.textContent = `${s.date}  ${s.word}`;
+      return li;
+    }));
     $("today").textContent = word.word || "";
     $("meaning").textContent = word.definition || "";
     showList(list);
@@ -145,6 +162,12 @@ async function upload(mode) {
     buttons.forEach((b) => (b.disabled = false));
   }
 }
+
+$("edit").addEventListener("click", async () => {
+  const list = await fetch("/word-list").then((r) => r.json());
+  $("words").value = list.words.join("\n") + "\n";
+  status("Edit the words, then click Replace list.", true);
+});
 
 $("replace").addEventListener("click", () => upload("replace"));
 $("add").addEventListener("click", () => upload("add"));
