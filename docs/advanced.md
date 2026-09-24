@@ -179,8 +179,9 @@ repeats two days in a row. Picks are deterministic, so separate processes agree.
 from Merriam-Webster's Word of the Day feed (about the last 10 days are available, so
 `--date` works for those too) and uses your list only as a fallback when the feed is down,
 hasn't posted yet (it publishes around 1 a.m. US Eastern) or the word can't be looked up.
-A word already recorded for today always stands, so a fallback word chosen before the
-feed posted stays for that day.
+A fallback word is recorded as provisional and replaced as soon as Merriam-Webster's own
+word appears; otherwise a word already recorded for today stands. The history file is
+updated under a lock, so the command line and the API can't overwrite each other.
 
 **Changing sources.** Cached lookups remember which dictionaries were configured. Adding
 or removing a Merriam-Webster key makes the old entries stale, so they're fetched again

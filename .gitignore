@@ -4,6 +4,7 @@
 # Runtime data: looked-up definitions and which day got which word
 cache/
 history.json
+history.json.lock
 
 # Python
 .venv/

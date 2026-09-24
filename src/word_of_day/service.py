@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 import time
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from datetime import date, datetime, timedelta, tzinfo
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -147,7 +147,7 @@ class WordOfTheDay:
         previewed for a future date can still change.
         """
         day = day or self.current_date()
-        return self._pick(self._candidate_words(), self._load_history(), day)
+        return self._pick(self._candidate_words(), self._load_history(), day)[0]
 
     def recent(self, count: int = 7) -> list[tuple[date, str]]:
         """Words recorded for days before today, most recent first (e.g. for a quiz)."""
@@ -167,10 +167,10 @@ class WordOfTheDay:
             history = self._load_history()
             words = self._candidate_words()
             skipped: list[str] = []
-            changed = False
+            record: tuple[str, bool] | None = None  # (word, provisional) for today
             try:
                 for _ in range(MAX_PICKS):
-                    word = self._pick(words, history, day, exclude=skipped)
+                    word, provisional = self._pick(words, history, day, exclude=skipped)
                     try:
                         entry = self.lookup(word, refresh=refresh)
                     except WordNotFoundError:
@@ -181,18 +181,20 @@ class WordOfTheDay:
                         )
                         skipped.append(word)
                         history.not_found.add(word.casefold())
-                        changed = True
                         continue
 
-                    if day == self.current_date() and history.days.get(day) != word:
-                        history.days[day] = word
-                        changed = True
+                    if day == self.current_date() and (
+                        history.days.get(day) != word or (day in history.provisional) != provisional
+                    ):
+                        record = (word, provisional)
                     return entry
                 raise WordOfTheDayError(f"no dictionary has any of: {', '.join(skipped)}")
             finally:
                 # Also runs when giving up, so known-bad words aren't tried again.
-                if changed:
-                    self._save_history(history)
+                if skipped or record:
+                    self._update_history(
+                        lambda h: self._apply_pick(h, day, record, {w.casefold() for w in skipped})
+                    )
 
     def lookup(self, word: str, *, refresh: bool = False) -> WordEntry:
         """Look up any word, using the cache unless `refresh` is set.
@@ -262,18 +264,34 @@ class WordOfTheDay:
 
     # --- History ---
 
+    @staticmethod
+    def _apply_pick(
+        history: History, day: date, record: tuple[str, bool] | None, not_found: set[str]
+    ) -> None:
+        history.not_found |= not_found
+        if record:
+            word, provisional = record
+            history.days[day] = word
+            (history.provisional.add if provisional else history.provisional.discard)(day)
+
     def _pick(
         self, words: list[str], history: History, day: date, exclude: Collection[str] = ()
-    ) -> str:
+    ) -> tuple[str, bool]:
+        """Choose the word for `day`. Returns (word, provisional).
+
+        Provisional means a stand-in for Merriam-Webster's word, which isn't posted yet.
+        """
         recorded = history.days.get(day)
         skip = {w.casefold() for w in exclude}
         if self.word_source == "merriam":
-            # Today's recorded word stands; otherwise use Merriam-Webster's, if posted.
-            if recorded and recorded.casefold() not in skip:
-                return recorded
+            usable = recorded if recorded and recorded.casefold() not in skip else None
+            if usable and day not in history.provisional:
+                return usable, False
             featured = self._feed_word(day)
             if featured and featured.casefold() not in skip | history.not_found:
-                return featured
+                return featured, False
+            if usable:
+                return usable, True
             if not words:
                 raise WordOfTheDayError(
                     "Merriam-Webster's Word of the Day isn't available, "
@@ -283,11 +301,12 @@ class WordOfTheDay:
             # A recorded word stands unless it has since been removed from the list.
             still_listed = {w.casefold() for w in words} - skip
             if recorded and recorded.casefold() in still_listed:
-                return recorded
+                return recorded, False
         try:
-            return choose_word(
+            word = choose_word(
                 words, history.days, day, seed=self.seed, exclude={*history.not_found, *exclude}
             )
+            return word, self.word_source == "merriam"
         except ValueError:
             raise WordOfTheDayError(
                 f"no usable words left in {self.words_file}: every word is marked as not found"
@@ -321,26 +340,28 @@ class WordOfTheDay:
         `None` forgets all of them. Call it after adding words that were once missing
         from every dictionary.
         """
-        with self._lock:
-            history = self._load_history()
-            before = set(history.not_found)
-            if words is None:
+        forget = None if words is None else {w.casefold() for w in words}
+
+        def change(history: History) -> None:
+            if forget is None:
                 history.not_found.clear()
             else:
-                history.not_found -= {w.casefold() for w in words}
-            if history.not_found != before:
-                self._save_history(history)
+                history.not_found -= forget
+
+        with self._lock:
+            self._update_history(change)
 
     def _load_history(self) -> History:
         if self.history_file is None:
             return self._memory_history
         return History.load(self.history_file)
 
-    def _save_history(self, history: History) -> None:
+    def _update_history(self, change: Callable[[History], None]) -> None:
+        """Apply a change to the stored history (re-read first, so nothing else is lost)."""
         if self.history_file is None:
-            self._memory_history = history
+            change(self._memory_history)
         else:
-            history.save(self.history_file)
+            History.modify(self.history_file, change)
 
     # --- Lifecycle ---
 

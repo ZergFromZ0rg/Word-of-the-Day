@@ -81,8 +81,8 @@ fields for dashboards.
 By default the word comes from your list, and each word is used once before any repeats.
 To use **Merriam-Webster's own Word of the Day** instead, set `WOTD_WORD_SOURCE=merriam`
 in `.env` (or run with `--source merriam`). If their feed is down or hasn't posted yet,
-your list is the fallback. Whatever was shown today stays for the rest of the day, so
-switching takes effect tomorrow.
+your list is the fallback until it does. A word shown from your list stays for the rest
+of the day, so switching sources takes effect tomorrow.
 
 `word-of-the-day --history` lists every word shown so far, and `/manage` shows the same
 list in a browser.

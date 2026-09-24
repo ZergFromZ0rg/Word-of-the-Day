@@ -404,3 +404,41 @@ def test_from_env_reads_the_word_source(words_file):
         words_file, None, None, env={"WOTD_WORD_SOURCE": "merriam"}, word_source="list"
     ) as w:
         assert w.word_source == "list"
+
+
+def test_stand_in_word_is_replaced_once_merriam_posts_theirs(words_file, tmp_path):
+    history_file = tmp_path / "history.json"
+    source = KnownWords("compendious", "ephemeral", "serendipity", "laconic")
+    feed = {"xml": FEED_XML.replace("2026-09-23", "2026-09-20")}  # nothing for today yet
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=feed["xml"]))
+    )
+    wotd = WordOfTheDay(
+        words_file, [source], history_file=history_file, client=client, word_source="merriam"
+    )
+    wotd.current_date = lambda: TODAY
+
+    standin = wotd.today().word
+    assert standin in WORDS
+    assert History.load(history_file).provisional == {TODAY}
+    assert wotd.today().word == standin  # stable while the feed has nothing
+
+    feed["xml"] = FEED_XML  # Merriam-Webster posts today's word
+    wotd._feed_cache = None
+    assert wotd.today().word == "compendious"
+    saved = History.load(history_file)
+    assert saved.days[TODAY] == "compendious" and saved.provisional == set()
+    assert wotd.today().word == "compendious"
+
+
+def test_two_processes_do_not_overwrite_each_others_history(words_file, tmp_path):
+    history_file = tmp_path / "history.json"
+    a = make(
+        words_file, KnownWords("ephemeral", "serendipity", "laconic"), history_file=history_file
+    )
+    b = make(words_file, KnownWords(), history_file=history_file)
+    b_view = History.load(history_file)  # what b saw before a acted
+    word = a.today().word
+    b.clear_not_found(["something"])  # b writes after having read the older file
+    assert History.load(history_file).days == {TODAY: word}
+    assert b_view.days == {}
